@@ -55,7 +55,7 @@ import { AsyncSettingsModel, ChangedEventArgs, FileInfo, NumericTextBox, RatingC
 import { DataManager, Predicate, Query } from '@syncfusion/ej2-data';
 import { createElement, Internationalization, isNullOrUndefined, setCulture, closest } from '@syncfusion/ej2-base';
 import { AutoComplete, DdtSelectEventArgs, DropDownListComponent, DropDownTree, FieldSettingsModel } from '@syncfusion/ej2-react-dropdowns';
-import { MenuComponent, SidebarComponent } from '@syncfusion/ej2-react-navigations';
+import { AppBarComponent, MenuComponent, SidebarComponent } from '@syncfusion/ej2-react-navigations';
 import { ButtonComponent, CheckBox, CheckBoxComponent, ChipDirective, ChipListComponent, ChipsDirective } from '@syncfusion/ej2-react-buttons';
 import { DatePicker } from '@syncfusion/ej2-react-calendars';
 import { BeforeOpenEventArgs, DialogComponent, TooltipComponent } from '@syncfusion/ej2-react-popups';
@@ -1886,7 +1886,7 @@ export const App = () => {
         setSelectedField(selectedField);
         setSelectedDataType(mappedType);
         operatorOptions = operatorMap[mappedType];
-        if (operatorDropdown) {
+        if (operatorDropdown && operatorDropdown.current) {
           operatorDropdown.current.dataSource = operatorOptions;
         }
         setSelectedOperator(null);
@@ -3125,6 +3125,122 @@ export const App = () => {
     }
   };
 
+  let menuRef!: MenuComponent;
+  let menuMobileRef!: MenuComponent;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  let isResized: boolean = false;
+  let isDesktop: boolean = true;
+  let isMenuDesktopOpened: boolean = false;
+  let isMenuMobileOpened: boolean = false;
+  let menuAppBarFields = { text: ['category', 'value'], children: ['options'] };
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      isResized = true;
+
+      if (isResized && (isMenuDesktopOpened || isMenuMobileOpened)) {
+        isResized = false;
+        menuRef?.close();
+        menuMobileRef?.close();
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  });
+
+  const menuItems = [
+    {
+      category: 'LEARNING',
+      options: [
+        {
+          icon: 'platform-image sf-icon-demos',
+          link: 'https://ej2.syncfusion.com/react/demos/#/tailwind3/grid/overview',
+          title: 'Demos',
+          about: {
+            value: 'Explore our exciting product demos.',
+          },
+        },
+        {
+          icon: 'platform-image sf-icon-documentation',
+          link: 'https://ej2.syncfusion.com/react/documentation/grid/getting-started',
+          title: 'Documentation',
+          about: {
+            value: 'Comprehensive guides for every product.',
+          },
+        },
+        {
+          icon: 'platform-image sf-icon-blog',
+          link: 'https://www.syncfusion.com/blogs',
+          title: 'Blog',
+          about: {
+            value: 'Discover new ideas and perspectives.',
+          },
+        },
+        {
+          icon: 'platform-image sf-icon-tutorial-videos',
+          link: 'https://www.syncfusion.com/tutorial-videos/react/grid',
+          title: 'Tutorial Videos',
+          about: {
+            value: 'Sharpen your skills with our tutorial videos.',
+          },
+        },
+        {
+          icon: 'platform-image sf-icon-video-guide',
+          link: 'https://www.syncfusion.com/self-service-demo/react/',
+          title: 'Video Guides',
+          about: {
+            value: 'Explore key features in minutes with our quick video guides.',
+          },
+          isNew: true,
+        },
+        {
+          icon: 'platform-image sf-icon-showcase-app',
+          link: 'https://www.syncfusion.com/showcase-apps/react',
+          title: 'Showcase Apps',
+          about: {
+            value: 'Real-time apps built using our UI components.',
+          },
+          isNew: true,
+        },
+        {
+          icon: 'react-ui-kit',
+          link: 'https://ej2.syncfusion.com/react/essential-ui-kit/blocks/grid',
+          title: 'React UI Kit',
+          about: {
+            value: 'Prebuilt UI blocks for modern, responsive React apps.',
+          }
+        }
+      ],
+    },
+  ];
+
+  const menuTemplate = (data: any) => {
+    return (
+      <a
+        href={data.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="menu-item"
+        data-title={data.title}
+      >
+        {data.category && (
+          <div className="menu-title">{data.category}</div>
+        )}
+        <div className="menusubitems">
+          <div className="icon-spacing">
+            <span className={data.icon} />
+          </div>
+          <span className="menu-item-title">{data.title}</span>
+          {data.isNew && <span className="e-badge">NEW</span>}
+        </div>
+        <div className="description">{data.about?.value}</div>
+      </a>
+    );
+  };
+
   /* eslint-disable react-hooks/exhaustive-deps */
   const initialGridRender: JSX.Element = useMemo(() => {
     return (
@@ -3231,25 +3347,132 @@ export const App = () => {
 
   return (
     <div id="overalContainer" onClick={(e: any) => { removeWalkthrough(e) }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start", // Align to top of first row
-          flexWrap: "wrap",
-          gap: "16px"
-        }}
-      >
-        {/* TRY IT FREE button */}
-        <div style={{ flexShrink: 0, marginTop: '-2px' }}>
-          <a
-            id="download-now-button"
-            href="https://www.syncfusion.com/downloads/react?tag=es-livesample-react-featurerich-datagrid"
-            className="btn btn-free bold free-trial-gtag-sep15"
+      <div className="App">
+        <AppBarComponent colorMode="Dark" cssClass="appbar">
+          <div className="syncfusion-logo">
+            <a className="sync-logo-img" title="Syncfusion" aria-label="Syncfusion logo" href="https://www.syncfusion.com/">
+            </a>
+          </div>
+          <div className="e-appbar-separator"></div>
+          <div>
+            <span className="title">Feature Rich React Data Grid</span>
+          </div>
+
+          {isDesktop && (
+            <>
+              <div id="github" className="desktop-only">
+                <span className="githubdemo"> <span> <i className="fab fa-github"></i> </span>
+                  <a href="https://github.com/SyncfusionExamples/React-Feature-Rich-Grid" target="_blank" rel="noopener noreferrer"
+                    style={{ textDecoration: 'none', color: 'white', fontSize: '15px' }}>GitHub</a></span>
+              </div>
+
+              <div id="menu" className="desktop-only">
+                <MenuComponent id="listmenu" ref={(list: any) => menuRef = list}
+                  items={menuItems}
+                  showItemOnClick={true}
+                  fields={menuAppBarFields}
+                  template={menuTemplate}
+                  cssClass="e-template-menu"
+                  onOpen={() => {
+                      isMenuDesktopOpened = true;
+                  }}
+                ></MenuComponent>
+              </div>
+              <div id="demo" className="desktop-only">
+                <a
+                  id="book-free-demo" target="_blank"
+                  href="https://www.syncfusion.com/request-demo"
+                >
+                  <span className="bookdemo">BOOK A FREE DEMO</span>
+                </a>
+              </div>
+              <div id="tryfreebutton" className="desktop-only">
+                <a
+                  id="download-now-button" target="_blank"
+                  href="https://www.syncfusion.com/downloads/react/?tag=es-livesample-react-featurerich-datagrid"
+                  className="menu-item btn btn--primary"
+                >
+                  <span className="tryfree">TRY IT FREE</span>
+                </a>
+              </div>
+            </>
+          )}
+
+          {/* Hamburger icon for mobile */}
+          <div className="hamburger mobile-only"
+            onClick={() => {
+              setMobileMenuOpen(!mobileMenuOpen)
+            }
+            }
           >
-            <span className="btn__text">TRY IT FREE</span>
-          </a>
+            ☰
+          </div>
+
+        </AppBarComponent >
+
+        {/* Popup menu for mobile */}
+
+        { mobileMenuOpen && (<div className="popup-menu mobile-only">
+
+          <div id="github" className="mobile-only" style={{ display: 'flex', alignItems: 'center' }}>
+            <span className="githubdemo" style={{ display: 'flex', alignItems: 'center' }}>
+              <span style={{ padding: '2px', color: 'white' }}>
+                <i className="fab fa-github"></i>
+              </span>
+              <a
+                href="https://github.com/SyncfusionExamples/React-Feature-Rich-Grid"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none', color: 'white', fontSize: '15px', marginLeft: '5px' }}>GitHub</a></span>
+          </div> <hr className="separator-line-mobile" />
+          <div id="menumobile" className="mobile-only">
+            <MenuComponent id="listmenu" ref={(list: any) => menuMobileRef = list}
+              items={menuItems}
+              showItemOnClick={true}
+              enableScrolling={true}
+              fields={menuAppBarFields}
+              template={menuTemplate}
+              cssClass="e-template-menu"
+              onOpen={() => {
+                isMenuMobileOpened = true;
+              }}
+              beforeOpen={(e) => {
+                if (e.parentItem.category === 'LEARNING') {
+                  (closest(e.element, '.e-menu-wrapper') as HTMLElement).style.height = '250px';
+                }
+                const menuWrapper = document.getElementById("menumobile");
+                if (menuWrapper) {
+                  (menuWrapper as HTMLElement).style.setProperty('height', '300px', 'important');
+                }
+              }}
+              beforeClose={(e) => {
+                const menuWrapper = document.getElementById("menumobile");
+                if (menuWrapper) {
+                  (menuWrapper as HTMLElement).style.setProperty('height', '');
+                }
+              }}
+            ></MenuComponent>
+          </div>
+          <hr className="separator-line-mobile" />
+          <div id="demo" className="mobile-only">
+            <a
+              id="book-free-demo" target="_blank"
+              href="https://www.syncfusion.com/request-demo"
+            >
+              <span className="bookdemo">BOOK A FREE DEMO</span>
+            </a>
+          </div> <hr className="separator-line-mobile" />
+          <div className="mobile-only">
+            <a
+              id="download-now-button" target="_blank"
+              href="https://www.syncfusion.com/downloads/react"
+              className="btn btn-free bold free-trial-gtag-sep15"
+            >
+              <span className="tryfree">TRY IT FREE</span>
+            </a>
+          </div>
         </div>
+        )}
       </div>
       <div className='parent-Grid-Container'>
         {initialGridRender}
