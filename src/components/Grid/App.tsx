@@ -133,8 +133,6 @@ export const App = () => {
   let dialogInstance: DialogComponent;
   let dialogObj: DialogComponent;
   let listObj!: ListViewComponent;
-  let appbarRef!: AppBarComponent;
-  let previewRef!: HTMLElement | null;
   let sidebarobj = useRef(null);
   let selectedFilterType: string = "FilterBar";
   let selectedFilterBarMode: string = "OnEnter";
@@ -144,7 +142,6 @@ export const App = () => {
   let selectNewRowPosition: string = "Top";
   let selectEditMode: string = "Normal";
   let filteredData;
-  const listMainContentRef = useRef(null);
   const orderIDRules: object = { required: true };
   const productIDRules: object = { required: true };
   const customerIDRules: object = { required: true };
@@ -492,7 +489,13 @@ export const App = () => {
       });
     },
 
+
     handleClick: (value: string) => {
+      
+       let columns = gridInstance.getColumns();
+       let commandColumn = columns.find(col => col.headerText === 'Commands');
+       let columnCheckbox = columns.find(col => col.type === 'checkbox');
+
       setDropdownValues((prev) => {
         if (selectedListItemRef.current === "Selection Settings") {
           gridInstance.selectionSettings.checkboxMode = prev.checkboxmodedefault as CheckboxSelectionType;
@@ -504,15 +507,10 @@ export const App = () => {
         else if (selectedListItemRef.current === "Edit Settings") {
           gridInstance.editSettings.newRowPosition = prev.newrowposition as NewRowPosition;
           gridInstance.editSettings.mode = prev.editmode as EditMode;
-          if (prev.editmode === 'Batch') {
-            let columns = gridInstance.getColumns();
-            columns.forEach((col) => {
-              if (col.headerText === 'Commands') {
-                col.visible = false;
-                gridInstance.refreshColumns();
-                gridInstance.toolbar = gridProperties.toolbarOptions;
-              }
-            });
+          if (prev.editmode === 'Batch' && commandColumn) {
+            commandColumn.visible = false;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = gridProperties.toolbarOptions;
           }
         }
         else if (selectedListItemRef.current === "Filter Settings") {
@@ -551,22 +549,12 @@ export const App = () => {
           gridInstance.allowResizing = prev.resizing;
         }
         else if (selectedListItemRef.current === "Selection Settings") {
-          let columns = gridInstance.getColumns();
-          if (prev.checkboxselection) {
-            columns.forEach((col) => {
-              if (col.type === 'checkbox') {
-                col.visible = true;
-                gridInstance.refreshColumns();
-              }
-            });
-          } else if (!prev.checkboxselection) {
-            columns.forEach((col) => {
-              if (col.type === 'checkbox') {
-                col.visible = false;
-                gridInstance.refreshColumns();
-              }
-            });
-          }
+          columns.forEach((col) => {
+            if (col.type === 'checkbox') {
+              col.visible = !!prev.checkboxselection; // true if enabled, false if not
+              gridInstance.refreshColumns();
+            }
+          });
           gridInstance.selectionSettings.allowColumnSelection = prev.columnselection;
           gridInstance.selectionSettings.checkboxOnly = prev.checkboxonly;
           gridInstance.selectionSettings.persistSelection = prev.persistselection;
@@ -578,23 +566,13 @@ export const App = () => {
           gridInstance.editSettings.allowDeleting = prev.deleting;
           gridInstance.editSettings.allowEditOnDblClick = prev.editondoubleclick;
           gridInstance.editSettings.allowEditing = prev.editing;
-          if (!prev.editing || !prev.deleting) {
-            let columns = gridInstance.getColumns();
-            columns.forEach((col) => {
-              if (col.headerText === 'Commands') {
-                col.visible = false;
-                gridInstance.refreshColumns();
-                gridInstance.toolbar = !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;            
-              }
-            });
-          } else if (gridInstance.editSettings.mode !== 'Batch' && prev.editing) {
-            let columns = gridInstance.getColumns();
-            columns.forEach((col) => {
-              if (col.headerText === 'Commands') {
-                col.visible = true;
-                gridInstance.refreshColumns();
-              }
-            });
+          if ((!prev.editing || !prev.deleting) && commandColumn) {
+            commandColumn.visible = false;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;
+          } else if (gridInstance.editSettings.mode !== 'Batch' && prev.editing && commandColumn) {
+            commandColumn.visible = true;
+            gridInstance.refreshColumns();
             gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit' && item !== 'Update' && item !== 'Delete' && item !== 'Cancel');
           }
           gridInstance.editSettings.allowNextRowEdit = prev.nextrowedit;
@@ -683,7 +661,6 @@ export const App = () => {
             dialogObj.enableRtl = prev.rtl;
             gridInstance.enableRtl = prev.rtl;
             listObj.enableRtl = prev.rtl;
-            // appbarRef.enableRtl = prev.rtl;
           }
           Object.keys(dropdownRefs.current).forEach((key) => {
             dropdownRefs.current[key].enableRtl = prev.rtl;
@@ -870,15 +847,15 @@ export const App = () => {
               template={menuItemTemplates.menuSwitchTemplate}
               showItemOnClick={true}
               beforeOpen={() => {
-                if (!gridInstance.allowGrouping) {
-                  menuShipColumn.enableItems(['Enable Grouping'], false);
-                }
-                if (!gridInstance.allowTextWrap) {
-                  menuShipColumn.enableItems(['Enable Text Wrap'], false);
-                }
-                if (!gridInstance.allowResizing) {
-                  menuShipColumn.enableItems(['Enable Resizing'], false);
-                }
+                const settings = {
+                  'Enable Grouping': gridInstance.allowGrouping,
+                  'Enable Resizing': gridInstance.allowResizing
+                };
+                Object.entries(settings).forEach(([item, isEnabled]) => {
+                  if (!isEnabled) {
+                    menuShipColumn.enableItems([item], false);
+                  }
+                });
               }}
               select={() => {
                 isHeaderTemplate = true;
@@ -963,16 +940,17 @@ export const App = () => {
               template={menuItemTemplates.menuSwitchTemplate}
               showItemOnClick={true}
               beforeOpen={() => {
-                if (!gridInstance.allowGrouping) {
-                  menuFreightColumn.enableItems(['Enable Grouping'], false);
-                }
-                if (!gridInstance.allowReordering) {
-                  menuFreightColumn.enableItems(['Enable Reordering'], false);
-                } if (!gridInstance.allowResizing) {
-                  menuFreightColumn.enableItems(['Enable Resizing'], false);
-                } if (!gridInstance.editSettings.allowEditing) {
-                  menuFreightColumn.enableItems(['Enable Editing'], false);
-                }
+                const settings = {
+                  'Enable Grouping': gridInstance.allowGrouping,
+                  'Enable Reordering': gridInstance.allowReordering,
+                  'Enable Resizing': gridInstance.allowResizing,
+                  'Enable Editing': gridInstance.editSettings.allowEditing
+                };
+                Object.entries(settings).forEach(([item, isEnabled]) => {
+                  if (!isEnabled) {
+                    menuFreightColumn.enableItems([item], false);
+                  }
+                });
               }}
               select={() => {
                 isHeaderTemplate = true;
@@ -1388,12 +1366,6 @@ export const App = () => {
 
     }),
 
-    singleColumnSettingsTextWrap: ((args: ChangeEventArgs) => {
-      if (gridInstance) {
-        gridInstance.allowTextWrap = args.checked;
-      }
-    }),
-
     singleColumnSettingsClipMode: ((args: ChangeEventArgs, data?: any) => {
       if (gridInstance) {
         let columns = gridInstance.getColumns();
@@ -1525,233 +1497,179 @@ export const App = () => {
       }
     }),
 
-    dropdownValueChange: (selectedListItem: string, items: GridPropertiesConfig, dropRef: any, checkRef: any) => {
-      const filtertypeElement = document.getElementById("filtertype");
+    setElementState: (element: HTMLElement | null, enabled: boolean) => {
+      if (!element) return;
+      if (enabled) {
+        element.classList.remove("e-disabled");
+        element.removeAttribute("disabled");
+      } else {
+        element.classList.add("e-disabled");
+        element.setAttribute("disabled", "true");
+      }
+    },
+
+    dropdownValueChange: (
+      selectedListItem: string,
+      items: GridPropertiesConfig,
+      dropRef: any,
+      checkRef: any
+    ) => {
       const newrowpositionElement = document.getElementById("newrowposition");
       const filterbarmodeElement = document.getElementById("filterbarmode");
       const loadingIndicatorElement = document.getElementById("loadingindicator");
       const checkboxmodedefaultElement = document.getElementById("checkboxmodedefault");
+
       setDisableValues((prev) => {
+        const update = { ...prev };
+
         if (selectedListItem === "Edit Settings") {
-          if (dropRef['editmode'].value === "Dialog" || dropRef['editmode'].value === "Normal") {
-            checkRef['confirmdialog'].disabled = prev.confirmdialog = true;
-            if (dropRef['editmode'].value === "Dialog") {
-              checkRef['nextrowedit'].disabled = prev.nextrowedit = true;
-              dropRef['newrowposition'].enabled = prev.newrowposition = false;
-              newrowpositionElement!.classList.add("e-disabled");
-              newrowpositionElement!.setAttribute("disabled", "true");
-            }
-            else {
-              checkRef['nextrowedit'].disabled = prev.nextrowedit = false;
-              dropRef['newrowposition'].enabled = prev.newrowposition = true;
-              newrowpositionElement!.classList.remove("e-disabled");
-              newrowpositionElement!.removeAttribute("disabled");
-            }
-          }
+          const editMode = dropRef['editmode'].value;
+          update.confirmdialog = true;
+          checkRef['confirmdialog'].disabled = true;
+
+          if (editMode === "Dialog") {
+            update.nextrowedit = true;
+            update.newrowposition = false;
+          } else if (editMode === "Normal") {
+            update.nextrowedit = false;
+            update.newrowposition = true;
+          } else if (editMode === "Batch") {
+            update.confirmdialog = false;
+            checkRef['confirmdialog'].disabled = false;
+            update.nextrowedit = false;
+            update.newrowposition = true;
+          } 
           else {
-            checkRef['nextrowedit'].disabled = prev.nextrowedit = false;
-            checkRef['confirmdialog'].disabled = prev.confirmdialog = false;
-            dropRef['newrowposition'].enabled = prev.newrowposition = true;
-            newrowpositionElement!.classList.remove("e-disabled");
-            newrowpositionElement!.removeAttribute("disabled");
-          }
-        } else if (selectedListItem === "Filter Settings") {
-          if (dropRef['filtertype'].value === "FilterBar") {
-            checkRef['enableinfinitescrolling'].disabled = prev.enableinfinitescrolling = true;
-            dropRef['loadingindicator'].enabled = prev.loadingindicator = false;
-            loadingIndicatorElement!.classList.add("e-disabled");
-            loadingIndicatorElement!.setAttribute("disabled", "true");
-            dropRef['filterbarmode'].enabled = prev.filterbarmode = true;
-            filterbarmodeElement!.classList.remove("e-disabled");
-            filterbarmodeElement!.removeAttribute("disabled");
-            checkRef['filterbar'].disabled = prev.filterbar = false;
-            checkRef['barstatus'].disabled = prev.barstatus = false;
+            update.confirmdialog = false;
+            update.nextrowedit = false;
+            update.newrowposition = true;
           }
 
-          if (dropRef['filtertype'].value === "Excel" || dropRef['filtertype'].value === "CheckBox") {
-            checkRef['filterbar'].disabled = prev.filterbar = true;
-            checkRef['barstatus'].disabled = prev.barstatus = true;
-            dropRef['filterbarmode'].enabled = prev.filterbarmode = false;
-            filterbarmodeElement!.classList.add("e-disabled");
-            filterbarmodeElement!.setAttribute("disabled", "true");
-            loadingIndicatorElement!.classList.remove("e-disabled");
-            loadingIndicatorElement!.removeAttribute("disabled");
-            checkRef['enableinfinitescrolling'].disabled = prev.enableinfinitescrolling = false;
-            dropRef['loadingindicator'].enabled = prev.loadingindicator = true;
-          }
+          checkRef['nextrowedit'].disabled = update.nextrowedit;
+          dropRef['newrowposition'].enabled = update.newrowposition;
+          menuItemMethods.setElementState(newrowpositionElement, update.newrowposition);
+        }
 
-          if (dropRef['filtertype'].value === "Menu") {
-            checkRef['filterbar'].disabled = prev.filterbar = true;
-            checkRef['barstatus'].disabled = prev.barstatus = true;
-            dropRef['filterbarmode'].enabled = prev.filterbarmode = false;
-            filterbarmodeElement!.classList.add("e-disabled");
-            filterbarmodeElement!.setAttribute("disabled", "true");
-            checkRef['enableinfinitescrolling'].disabled = prev.enableinfinitescrolling = true;
-            dropRef['loadingindicator'].enabled = prev.loadingindicator = true;
-            loadingIndicatorElement!.classList.add("e-disabled");
-            loadingIndicatorElement!.setAttribute("disabled", "true");
-          }
+        else if (selectedListItem === "Filter Settings") {
+          const filterType = dropRef['filtertype'].value;
+
+          const isFilterBar = filterType === "FilterBar";
+          const isExcelOrCheckBox = filterType === "Excel" || filterType === "CheckBox";
+          const isMenu = filterType === "Menu";
+
+          update.filterbar = !isFilterBar;
+          update.barstatus = !isFilterBar;
+          update.filterbarmode = isFilterBar;
+          update.loadingindicator = isExcelOrCheckBox;
+          update.enableinfinitescrolling = !isFilterBar && !isMenu;
+
+          checkRef['filterbar'].disabled = update.filterbar;
+          checkRef['barstatus'].disabled = update.barstatus;
+          dropRef['filterbarmode'].enabled = update.filterbarmode;
+          dropRef['loadingindicator'].enabled = update.loadingindicator;
+          checkRef['enableinfinitescrolling'].disabled = !update.enableinfinitescrolling;
+
+          menuItemMethods.setElementState(filterbarmodeElement, update.filterbarmode);
+          menuItemMethods.setElementState(loadingIndicatorElement, update.loadingindicator);
         }
 
         else if (selectedListItem === "Selection Settings") {
-          if (dropRef['selectiontype'].value === "Multiple") {
-            checkRef['simplemultirow'].disabled = prev.simplemultirow = false;
-            checkRef['toggle'].disabled = prev.toggle = false;
-            checkRef['checkboxselection'].disabled = prev.checkboxselection = false;
-            checkRef['persistselection'].disabled = prev.persistselection = true;
-            checkRef['checkboxonly'].disabled = prev.checkboxonly = true;
-            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = true;
-            checkboxmodedefaultElement!.classList.add("e-disabled");
-            checkboxmodedefaultElement!.setAttribute("disabled", "true");
-          }
-          else if (dropRef['selectiontype'].value === "Single") {
-            checkRef['simplemultirow'].disabled = prev.simplemultirow = true;
-            checkRef['toggle'].disabled = prev.toggle = false;
-            checkRef['checkboxselection'].disabled = prev.checkboxselection = true;
-            checkRef['persistselection'].disabled = prev.persistselection = true;
-            checkRef['checkboxonly'].disabled = prev.checkboxonly = true;
-            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = true;
-            checkboxmodedefaultElement!.classList.add("e-disabled");
-            checkboxmodedefaultElement!.setAttribute("disabled", "true");
+          const selectionType = dropRef['selectiontype'].value;
+          const isMultiple = selectionType === "Multiple";
 
-          }
+          update.simplemultirow = !isMultiple;
+          update.toggle = false;
+          update.checkboxselection = !isMultiple;
+          update.persistselection = true;
+          update.checkboxonly = true;
+          update.checkboxmodedefault = true;
+
+          checkRef['simplemultirow'].disabled = update.simplemultirow;
+          checkRef['toggle'].disabled = update.toggle;
+          checkRef['checkboxselection'].disabled = update.checkboxselection;
+          checkRef['persistselection'].disabled = update.persistselection;
+          checkRef['checkboxonly'].disabled = update.checkboxonly;
+          dropRef['checkboxmodedefault'].disabled = update.checkboxmodedefault;
+          menuItemMethods.setElementState(checkboxmodedefaultElement, !update.checkboxmodedefault);
         }
-        Object.keys(disableValues).forEach((prop) => {
-          disableValues[prop] = prev[prop];
-        });
-        return prev;
-      });
 
+        Object.assign(disableValues, update);
+        return update;
+      });
+    },
+    
+    toggleListItem: (itemText: string, enable: boolean, listObj: any, dropdownDataSource: any) => {
+      const index = dropdownDataSource.listViewData.findIndex((item: any) => item.text === itemText);
+      if (index !== -1 && listObj) {
+        enable ? listObj.enableItem(dropdownDataSource.listViewData[index]) : listObj.disableItem(dropdownDataSource.listViewData[index]);
+      }
+    },
+
+    toggleElement: (elementId: string, enable: boolean) => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.classList.toggle("e-disabled", !enable);
+        el.toggleAttribute("disabled", !enable);
+      }
     },
 
     checkboxValueChange: (selectedListItem: string, items: GridPropertiesConfig, checkRef: any, dropRef: any) => {
-      const editmodeElement = document.getElementById("editmode");
-      const newrowpositionElement = document.getElementById("newrowposition");
-      const checkboxmodedefaultElement = document.getElementById("checkboxmodedefault");
-      setDisableValues((prev) => {
+      setDisableValues(prev => {
+        const updateCheckboxState = (key: string, state: boolean) => {
+          checkRef[key].disabled = prev[key] = !state;
+        };
 
-        if (selectedListItem === "Header Settings") {
+        switch (selectedListItem) {
+          case "Header Settings":
+            menuItemMethods.toggleListItem("Filter Settings", checkRef['filtering'].checked, listObj, dropdownDataSource);
+            updateCheckboxState("multisorting", checkRef['sorting'].checked);
+            menuItemMethods.toggleListItem("Group Settings", checkRef['grouping'].checked, listObj, dropdownDataSource);
+            break;
 
-          if (!checkRef['filtering'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Filter Settings");
-            listObj.disableItem(dropdownDataSource.listViewData[listIndex]);
+          case "Grid Settings":
+            menuItemMethods.toggleListItem("Selection Settings", checkRef['selection'].checked, listObj, dropdownDataSource);
+            updateCheckboxState("autofit", checkRef['column_menu'].checked);
+            break;
 
-          } else if (checkRef['filtering'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Filter Settings");
-            listObj.enableItem(dropdownDataSource.listViewData[listIndex]);
-          }
-
-          if (!checkRef['sorting'].checked) {
-            checkRef['multisorting'].disabled = prev.multisorting = true;
-          } else if (checkRef['sorting'].checked) {
-            checkRef['multisorting'].disabled = prev.multisorting = false;
-          }
-
-          if (!checkRef['grouping'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Group Settings");
-            listObj.disableItem(dropdownDataSource.listViewData[listIndex]);
-          } else if (checkRef['grouping'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Group Settings");
-            listObj.enableItem(dropdownDataSource.listViewData[listIndex]);
-          }
-        }
-
-        else if (selectedListItem === "Grid Settings") {
-          if (!checkRef['selection'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Selection Settings");
-            listObj.disableItem(dropdownDataSource.listViewData[listIndex]);
-          } else if (checkRef['selection'].checked && listObj) {
-            const listIndex = dropdownDataSource.listViewData.findIndex(item => item.text === "Selection Settings");
-            listObj.enableItem(dropdownDataSource.listViewData[listIndex]);
-          }
-
-          if (!checkRef['column_menu'].checked) {
-            checkRef['autofit'].disabled = prev.autofit = true;
-          } else if (checkRef['column_menu'].checked) {
-            checkRef['autofit'].disabled = prev.autofit = false;
-          }
-        }
-
-        else if (selectedListItem === "Selection Settings") {
-          if (!checkRef['checkboxselection'].checked) {
-            dropRef['selectiontype'].dataSource = dropdownDataSource.selectiontypeModified;
+          case "Selection Settings":
+            const isCheckboxSelected = checkRef['checkboxselection'].checked;
+            dropRef['selectiontype'].dataSource = isCheckboxSelected ? dropdownDataSource.selectiontype : dropdownDataSource.selectiontypeModified;
             dropRef['selectiontype'].value = dropdownValues['selectiontype'];
-            checkRef['simplemultirow'].disabled = prev.simplemultirow = false;
-            checkRef['toggle'].disabled = prev.toggle = false;
-            checkRef['persistselection'].disabled = prev.persistselection = true;
-            checkRef['checkboxonly'].disabled = prev.checkboxonly = true;
-            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = true;
-            checkboxmodedefaultElement!.classList.add("e-disabled");
-            checkboxmodedefaultElement!.setAttribute("disabled", "true");
-          } else if (checkRef['checkboxselection'].checked) {
-            dropRef['selectiontype'].dataSource = dropdownDataSource.selectiontype;
-            dropRef['selectiontype'].value = dropdownValues['selectiontype'];
-            checkRef['simplemultirow'].disabled = prev.simplemultirow = true;
-            checkRef['toggle'].disabled = prev.toggle = true;
-            checkRef['persistselection'].disabled = prev.persistselection = false;
-            checkRef['checkboxonly'].disabled = prev.checkboxonly = false;
-            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = false;
-            checkboxmodedefaultElement!.classList.remove("e-disabled");
-            checkboxmodedefaultElement!.removeAttribute("disabled");
-          }
 
+            ["simplemultirow", "toggle"].forEach(key => updateCheckboxState(key, !isCheckboxSelected));
+            ["persistselection", "checkboxonly"].forEach(key => updateCheckboxState(key, isCheckboxSelected));
+            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = !isCheckboxSelected;
+            menuItemMethods.toggleElement("checkboxmodedefault", isCheckboxSelected);
+            break;
+
+          case "Edit Settings":
+            const isEditing = checkRef['editing'].checked;
+            ["nextrowedit", "editondoubleclick"].forEach(key => updateCheckboxState(key, isEditing));
+            dropRef['editmode'].enabled = prev.editMode = isEditing;
+            menuItemMethods.toggleElement("editmode", isEditing);
+
+            const isDialogMode = dropRef['editmode'].value === 'Dialog';
+            const newRowEnabled = isEditing && !isDialogMode;
+            dropRef['newrowposition'].enabled = prev.newrowposition = newRowEnabled;
+            menuItemMethods.toggleElement("newrowposition", newRowEnabled);
+
+            updateCheckboxState("deletedialog", checkRef['deleting'].checked);
+
+            const isAdding = checkRef['adding'].checked;
+            const addRowEnabled = isAdding && !isDialogMode;
+            dropRef['newrowposition'].enabled = prev.newrowposition = addRowEnabled;
+            menuItemMethods.toggleElement("newrowposition", addRowEnabled);
+            break;
         }
 
-        else if (selectedListItem === "Edit Settings") {
-          if (!checkRef['editing'].checked) {
-            checkRef['nextrowedit'].disabled = prev.nextrowedit = true;
-            checkRef['editondoubleclick'].disabled = prev.editondoubleclick = true;
-            dropRef['editmode'].enabled = prev.editMode = false;
-            editmodeElement!.classList.add("e-disabled");
-            editmodeElement!.setAttribute("disabled", "true");
-          } else if (checkRef['editing'].checked) {
-            checkRef['nextrowedit'].disabled = prev.nextrowedit = false;
-            checkRef['editondoubleclick'].disabled = prev.editondoubleclick = false;
-            dropRef['editmode'].enabled = prev.editMode = true;
-            editmodeElement!.classList.remove("e-disabled");
-            editmodeElement!.removeAttribute("disabled");
-            if (dropRef['editmode'].value === 'Dialog') {
-              checkRef['nextrowedit'].disabled = prev.nextrowedit = true;
-              dropRef['newrowposition'].enabled = prev.newrowposition = false;
-              newrowpositionElement!.classList.add("e-disabled");
-              newrowpositionElement!.setAttribute("disabled", "true");
-            } else {
-              checkRef['nextrowedit'].disabled = prev.nextrowedit = false;
-              dropRef['newrowposition'].enabled = prev.newrowposition = true;
-              newrowpositionElement!.classList.remove("e-disabled");
-              newrowpositionElement!.removeAttribute("disabled");
-            }
-          }
-
-          if (!checkRef['deleting'].checked) {
-            checkRef['deletedialog'].disabled = prev.deletedialog = true;
-          } else if (checkRef['deleting'].checked) {
-            checkRef['deletedialog'].disabled = prev.deletedialog = false;
-          }
-
-          if (!checkRef['adding'].checked) {
-            dropRef['newrowposition'].enabled = prev.newrowposition = false;
-            newrowpositionElement!.classList.add("e-disabled");
-            newrowpositionElement!.setAttribute("disabled", "true");
-          } else if (checkRef['adding'].checked) {
-            if (dropRef['editmode'].value === 'Dialog') {
-              dropRef['newrowposition'].enabled = prev.newrowposition = false;
-              newrowpositionElement!.classList.add("e-disabled");
-              newrowpositionElement!.setAttribute("disabled", "true");
-            } else {
-              dropRef['newrowposition'].enabled = prev.newrowposition = true;
-              newrowpositionElement!.classList.remove("e-disabled");
-              newrowpositionElement!.removeAttribute("disabled");
-            }
-          }
-        }
-
-        Object.keys(disableValues).forEach((prop) => {
+        Object.keys(disableValues).forEach(prop => {
           disableValues[prop] = prev[prop];
         });
+
         return prev;
       });
-    }
+    },
+
   };
 
   const menuItemProperties = {
@@ -1876,7 +1794,6 @@ export const App = () => {
           },
           { text: 'Enable Resizing', method: menuItemMethods.enableColumnResize, singlecheckbox: true },
           { text: 'Enable Grouping', method: menuItemMethods.enableColumnGrouping, singlecheckbox: true },
-          { text: 'Enable Text Wrap', method: menuItemMethods.singleColumnSettingsTextWrap, singlecheckbox: false }
         ],
       },
     ]
@@ -2653,7 +2570,7 @@ export const App = () => {
     pageOptions: { pageCount: 5, pageSizes: [5, 10, 12, 20, 30], pageSize: 30 },
     groupOptions: { allowReordering: true },
     editOptions: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, showConfirmDialog: true, mode: 'Normal' as EditMode },
-    contextMenuOptions: ['SortAscending', 'SortDescending', 'Group', 'Ungroup', 'Copy', 'Edit', 'Delete', 'Save', 'Cancel', 'FirstPage', 'PrevPage',
+    contextMenuOptions: ['AutoFit', 'AutoFitAll', 'SortAscending', 'SortDescending', 'Group', 'Ungroup', 'Copy', 'Edit', 'Delete', 'Save', 'Cancel', 'FirstPage', 'PrevPage',
       'LastPage', 'NextPage'] as ContextMenuItem[] | ContextMenuItemModel[],
     sortingOptions: {
       columns: [{ field: 'OrderID', direction: 'Ascending' }, { field: 'Quantity', direction: 'Descending' }]
@@ -3512,8 +3429,7 @@ export const App = () => {
         emptyRecordTemplate={gridCommonTemplates.emptyMessageTemplate}
       >
         <ColumnsDirective>
-          <ColumnDirective type='checkbox' visible={true}
-            width={40} minWidth={35} maxWidth={80} />
+          <ColumnDirective type='checkbox' width={40} minWidth={35} maxWidth={80} />
           <ColumnDirective field="OrderID" minWidth={60} maxWidth={130}
             disableHtmlEncode={false} headerText='Order ID'
             isPrimaryKey={true} textAlign={'Right'} width={115}
