@@ -1418,7 +1418,7 @@ hr.separator-line-mobile {
   margin-right: 5px;
 }
 
-.e-grid .e-toolbar .e-tbar-btn-text, 
-.e-grid .e-toolbar .e-toolbar-items .e-toolbar-item .e-tbar-btn-text {
-    display: none;   
+#overviewgrid_edit .e-tbar-btn-text , #overviewgrid_delete .e-tbar-btn-text,
+#overviewgrid_update .e-tbar-btn-text, #overviewgrid_cancel .e-tbar-btn-text {
+  display: none !important;
 }
