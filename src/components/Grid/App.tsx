@@ -494,7 +494,6 @@ export const App = () => {
       
        let columns = gridInstance.getColumns();
        let commandColumn = columns.find(col => col.headerText === 'Commands');
-       let columnCheckbox = columns.find(col => col.type === 'checkbox');
 
       setDropdownValues((prev) => {
         if (selectedListItemRef.current === "Selection Settings") {
@@ -510,7 +509,7 @@ export const App = () => {
           if (prev.editmode === 'Batch' && commandColumn) {
             commandColumn.visible = false;
             gridInstance.refreshColumns();
-            gridInstance.toolbar = gridProperties.toolbarOptions;
+            gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit');
           }
         }
         else if (selectedListItemRef.current === "Filter Settings") {
@@ -569,7 +568,7 @@ export const App = () => {
           if ((!prev.editing || !prev.deleting) && commandColumn) {
             commandColumn.visible = false;
             gridInstance.refreshColumns();
-            gridInstance.toolbar = !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;
+            gridInstance.toolbar = gridInstance.editSettings.mode === 'Batch' ? gridProperties.toolbarOptions.filter(item => item !== 'Edit') : !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;
           } else if (gridInstance.editSettings.mode !== 'Batch' && prev.editing && commandColumn) {
             commandColumn.visible = true;
             gridInstance.refreshColumns();
@@ -1068,7 +1067,15 @@ export const App = () => {
 
 
     settingsDialogTemplate: (): JSX.Element => {
-
+      const dialogContainers = document.querySelectorAll('#example_dialog');
+      // If more than one instance exists, skip rendering and return settings icon.
+      if (dialogContainers.length > 1) {
+        return (
+          <div style={{ marginTop: '4px' }}>
+            <span style={{ fontSize: '16px' }} id="walk_property_settings" className='e-icons e-settings icon'></span>
+          </div>
+        );
+      }
       return (
         <div style={{ marginTop: '4px' }}>
           <span style={{ fontSize: '16px' }} id="walk_property_settings" className='e-icons e-settings icon'></span>
