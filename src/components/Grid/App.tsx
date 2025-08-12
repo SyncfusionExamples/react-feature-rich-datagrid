@@ -508,6 +508,7 @@ export const App = () => {
             commandColumn.visible = false;
             gridInstance.refreshColumns();
             gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit');
+            dialogObj?.hide();
           } else if (prev.editmode !== 'Batch' && commandColumn) {
             commandColumn.visible = true;
             gridInstance.refreshColumns();
