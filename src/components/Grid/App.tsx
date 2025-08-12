@@ -494,7 +494,6 @@ export const App = () => {
       
        let columns = gridInstance.getColumns();
        let commandColumn = columns.find(col => col.headerText === 'Commands');
-
       setDropdownValues((prev) => {
         if (selectedListItemRef.current === "Selection Settings") {
           gridInstance.selectionSettings.checkboxMode = prev.checkboxmodedefault as CheckboxSelectionType;
@@ -505,12 +504,17 @@ export const App = () => {
         }
         else if (selectedListItemRef.current === "Edit Settings") {
           gridInstance.editSettings.newRowPosition = prev.newrowposition as NewRowPosition;
-          gridInstance.editSettings.mode = prev.editmode as EditMode;
           if (prev.editmode === 'Batch' && commandColumn) {
             commandColumn.visible = false;
             gridInstance.refreshColumns();
             gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit');
+          } else if (prev.editmode !== 'Batch' && commandColumn) {
+            commandColumn.visible = true;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit' && item !== 'Update' && item !== 'Delete' && item !== 'Cancel');
+            dialogObj?.hide();
           }
+          gridInstance.editSettings.mode = prev.editmode as EditMode; 
         }
         else if (selectedListItemRef.current === "Filter Settings") {
           gridInstance.filterSettings.type = prev.filtertype as FilterType;
@@ -562,18 +566,15 @@ export const App = () => {
         }
         else if (selectedListItemRef.current === "Edit Settings") {
           gridInstance.editSettings.allowAdding = prev.adding;
-          gridInstance.editSettings.allowDeleting = prev.deleting;
           gridInstance.editSettings.allowEditOnDblClick = prev.editondoubleclick;
-          gridInstance.editSettings.allowEditing = prev.editing;
           if ((!prev.editing || !prev.deleting) && commandColumn) {
             commandColumn.visible = false;
             gridInstance.refreshColumns();
             gridInstance.toolbar = gridInstance.editSettings.mode === 'Batch' ? gridProperties.toolbarOptions.filter(item => item !== 'Edit') : !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;
-          } else if (gridInstance.editSettings.mode !== 'Batch' && prev.editing && commandColumn) {
-            commandColumn.visible = true;
-            gridInstance.refreshColumns();
-            gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit' && item !== 'Update' && item !== 'Delete' && item !== 'Cancel');
+            dialogObj?.hide();
           }
+          gridInstance.editSettings.allowEditing = prev.editing;
+          gridInstance.editSettings.allowDeleting = prev.deleting;
           gridInstance.editSettings.allowNextRowEdit = prev.nextrowedit;
           gridInstance.editSettings.showConfirmDialog = prev.confirmdialog;
           gridInstance.editSettings.showDeleteConfirmDialog = prev.deletedialog;
@@ -1004,7 +1005,6 @@ export const App = () => {
       if (listMainContent) {
         listMainContent.remove();
       }
-
       return (
         <div id="sblist-wrapper" className="control-section">
           <div id="sidelistwrapper">
@@ -1067,15 +1067,6 @@ export const App = () => {
 
 
     settingsDialogTemplate: (): JSX.Element => {
-      const dialogContainers = document.querySelectorAll('#example_dialog');
-      // If more than one instance exists, skip rendering and return settings icon.
-      if (dialogContainers.length > 1) {
-        return (
-          <div style={{ marginTop: '4px' }}>
-            <span style={{ fontSize: '16px' }} id="walk_property_settings" className='e-icons e-settings icon'></span>
-          </div>
-        );
-      }
       return (
         <div style={{ marginTop: '4px' }}>
           <span style={{ fontSize: '16px' }} id="walk_property_settings" className='e-icons e-settings icon'></span>
