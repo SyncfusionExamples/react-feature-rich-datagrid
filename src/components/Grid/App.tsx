@@ -104,6 +104,8 @@ export const App = () => {
   let [switchStates, setSwitchStates] = useState<{ [key: string]: boolean }>({});
   let selectedItemRef = useRef<{ text: string; id: string } | null>(null);
   let [dropdownValues, setDropdownValues] = useState<{ [key: string]: string }>({});
+  let [disableValues, setDisableValues] = useState<{ [key: string]: boolean }>({});
+  let [checkboxValues, setCheckboxValues] = useState<{ [key: string]: boolean }>({});
   let listFields = { id: "id", text: "text" };
   let isExpand: boolean = true;
   let enableRtlListView: boolean = false;
@@ -131,7 +133,6 @@ export const App = () => {
   let dialogInstance: DialogComponent;
   let dialogObj: DialogComponent;
   let listObj!: ListViewComponent;
-  let previewRef!: HTMLElement | null;
   let sidebarobj = useRef(null);
   let selectedFilterType: string = "FilterBar";
   let selectedFilterBarMode: string = "OnEnter";
@@ -151,9 +152,12 @@ export const App = () => {
   const [stepIndex, setStepIndex] = useState(-1);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   let menuObj: MenuComponent;
+  let menuFreightColumn: MenuComponent;
+  let menuShipColumn: MenuComponent;
   const [selectedDataType, setSelectedDataType] = useState<DataType>('string');
   let [selectedOperator, setSelectedOperator] = useState<string | null>(null);
   type DataType = 'string' | 'integer';
+
 
   const operatorMap: Record<DataType, { text: string; value: string }[]> = {
     string: [
@@ -473,15 +477,45 @@ export const App = () => {
       });
     },
 
+    // Method to dynamically change disabled state values
+    changeDisableState: (disableId: string, value: boolean) => {
+      setDisableValues((prevState) => {
+        const newState = {
+          ...prevState,
+          [disableId]: value
+        };
+        disableValues = newState;
+        return newState;
+      });
+    },
+
+
     handleClick: (value: string) => {
+      
+       let columns = gridInstance.getColumns();
+       let commandColumn = columns.find(col => col.headerText === 'Commands');
       setDropdownValues((prev) => {
         if (selectedListItemRef.current === "Selection Settings") {
           gridInstance.selectionSettings.checkboxMode = prev.checkboxmodedefault as CheckboxSelectionType;
           gridInstance.selectionSettings.type = prev.selectiontype as SelectionType;
+          if (prev.checkboxselection && (prev.checkboxmodedefault == "Default" || prev.checkboxmodedefault == "ResetOnRowClick")) {
+            gridInstance.selectionSettings.enableSimpleMultiRowSelection = false;
+          }
         }
         else if (selectedListItemRef.current === "Edit Settings") {
           gridInstance.editSettings.newRowPosition = prev.newrowposition as NewRowPosition;
-          gridInstance.editSettings.mode = prev.editmode as EditMode;
+          if (prev.editmode === 'Batch' && commandColumn) {
+            commandColumn.visible = false;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit');
+            dialogObj?.hide();
+          } else if (prev.editmode !== 'Batch' && commandColumn) {
+            commandColumn.visible = true;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = gridProperties.toolbarOptions.filter(item => item !== 'Edit' && item !== 'Update' && item !== 'Delete' && item !== 'Cancel');
+            dialogObj?.hide();
+          }
+          gridInstance.editSettings.mode = prev.editmode as EditMode; 
         }
         else if (selectedListItemRef.current === "Filter Settings") {
           gridInstance.filterSettings.type = prev.filtertype as FilterType;
@@ -519,6 +553,12 @@ export const App = () => {
           gridInstance.allowResizing = prev.resizing;
         }
         else if (selectedListItemRef.current === "Selection Settings") {
+          columns.forEach((col) => {
+            if (col.type === 'checkbox') {
+              col.visible = !!prev.checkboxselection; // true if enabled, false if not
+              gridInstance.refreshColumns();
+            }
+          });
           gridInstance.selectionSettings.allowColumnSelection = prev.columnselection;
           gridInstance.selectionSettings.checkboxOnly = prev.checkboxonly;
           gridInstance.selectionSettings.persistSelection = prev.persistselection;
@@ -527,9 +567,15 @@ export const App = () => {
         }
         else if (selectedListItemRef.current === "Edit Settings") {
           gridInstance.editSettings.allowAdding = prev.adding;
-          gridInstance.editSettings.allowDeleting = prev.deleting;
           gridInstance.editSettings.allowEditOnDblClick = prev.editondoubleclick;
+          if ((!prev.editing || !prev.deleting) && commandColumn) {
+            commandColumn.visible = false;
+            gridInstance.refreshColumns();
+            gridInstance.toolbar = gridInstance.editSettings.mode === 'Batch' ? gridProperties.toolbarOptions.filter(item => item !== 'Edit') : !prev.deleting ? gridProperties.toolbarOptions.filter(item => item !== 'Delete') : gridProperties.toolbarOptions;
+            dialogObj?.hide();
+          }
           gridInstance.editSettings.allowEditing = prev.editing;
+          gridInstance.editSettings.allowDeleting = prev.deleting;
           gridInstance.editSettings.allowNextRowEdit = prev.nextrowedit;
           gridInstance.editSettings.showConfirmDialog = prev.confirmdialog;
           gridInstance.editSettings.showDeleteConfirmDialog = prev.deletedialog;
@@ -689,8 +735,13 @@ export const App = () => {
     ],
 
     selectiontype: [
-      { value: "Single", text: "Single" },
-      { value: "Multiple", text: "Multiple" }
+      { value: "Single", text: "Single", isDisabled: true },
+      { value: "Multiple", text: "Multiple", isDisabled: false }
+    ],
+
+    selectiontypeModified: [
+      { value: "Single", text: "Single", isDisabled: false },
+      { value: "Multiple", text: "Multiple", isDisabled: false }
     ],
 
     checkboxmode: [
@@ -790,12 +841,23 @@ export const App = () => {
             <div>Ship Address</div>
           </div>
           <span className='iconMarginAlign'>
-            <MenuComponent
+            <MenuComponent ref={(scope: MenuComponent) => (menuShipColumn = scope)}
               items={menuItemProperties.columnMenuProperties}
               fields={menuFields}
               enableRtl={enableRtlListView}
               template={menuItemTemplates.menuSwitchTemplate}
               showItemOnClick={true}
+              beforeOpen={() => {
+                const settings = {
+                  'Enable Grouping': gridInstance.allowGrouping,
+                  'Enable Resizing': gridInstance.allowResizing
+                };
+                Object.entries(settings).forEach(([item, isEnabled]) => {
+                  if (!isEnabled) {
+                    menuShipColumn.enableItems([item], false);
+                  }
+                });
+              }}
               select={() => {
                 isHeaderTemplate = true;
               }}
@@ -872,12 +934,25 @@ export const App = () => {
             <div>Freight</div>
           </div>
           <span className='iconMarginAlign'>
-            <MenuComponent
+            <MenuComponent ref={(scope: MenuComponent) => (menuFreightColumn = scope)}
               items={menuItemProperties.columnMenuFormatProperties}
               fields={menuFields}
               enableRtl={enableRtlListView}
               template={menuItemTemplates.menuSwitchTemplate}
               showItemOnClick={true}
+              beforeOpen={() => {
+                const settings = {
+                  'Enable Grouping': gridInstance.allowGrouping,
+                  'Enable Reordering': gridInstance.allowReordering,
+                  'Enable Resizing': gridInstance.allowResizing,
+                  'Enable Editing': gridInstance.editSettings.allowEditing
+                };
+                Object.entries(settings).forEach(([item, isEnabled]) => {
+                  if (!isEnabled) {
+                    menuFreightColumn.enableItems([item], false);
+                  }
+                });
+              }}
               select={() => {
                 isHeaderTemplate = true;
               }}
@@ -922,6 +997,15 @@ export const App = () => {
     },
 
     sideBar: (): JSX.Element => {
+      const dialogListContents = document.getElementById('listContent');
+      if (dialogListContents) {
+        dialogListContents.remove();
+      }
+
+      const listMainContent = document.querySelector(".listmaincontent");
+      if (listMainContent) {
+        listMainContent.remove();
+      }
       return (
         <div id="sblist-wrapper" className="control-section">
           <div id="sidelistwrapper">
@@ -933,8 +1017,13 @@ export const App = () => {
               </div>
             </div>
           </div>
+
           <SidebarComponent id="listSidebar" ref={sidebarobj} enableDock={true}
-            dockSize="0px" className="sidebar-list" width="350px" target=".listmaincontent" type="Auto" isOpen={true}>
+            dockSize="0px" className="sidebar-list" width="350px"
+            target=".listmaincontent"
+            type="Auto"
+            isOpen={true}
+          >
             <ListViewComponent id="listSidebarList" enableRtl={enableRtlListView} ref={(list: any) => listObj = list} dataSource={dropdownDataSource.listViewData} height='100%' cssClass="e-template-list" template={gridCommonTemplates.listTemplate} fields={listFields} select={gridCommonTemplates.OnSelect}>
               <Inject services={[Virtualization]} />
             </ListViewComponent>
@@ -1276,12 +1365,6 @@ export const App = () => {
 
     }),
 
-    singleColumnSettingsTextWrap: ((args: ChangeEventArgs) => {
-      if (gridInstance) {
-        gridInstance.allowTextWrap = args.checked;
-      }
-    }),
-
     singleColumnSettingsClipMode: ((args: ChangeEventArgs, data?: any) => {
       if (gridInstance) {
         let columns = gridInstance.getColumns();
@@ -1413,137 +1496,179 @@ export const App = () => {
       }
     }),
 
+    setElementState: (element: HTMLElement | null, enabled: boolean) => {
+      if (!element) return;
+      if (enabled) {
+        element.classList.remove("e-disabled");
+        element.removeAttribute("disabled");
+      } else {
+        element.classList.add("e-disabled");
+        element.setAttribute("disabled", "true");
+      }
+    },
 
-    handleFilterTypeChange: (value: any, dropRef: any) => {
-      const filterbarElement = document.getElementById("filterbar");
-      const barstatusElement = document.getElementById("barstatus");
+    dropdownValueChange: (
+      selectedListItem: string,
+      items: GridPropertiesConfig,
+      dropRef: any,
+      checkRef: any
+    ) => {
+      const newrowpositionElement = document.getElementById("newrowposition");
       const filterbarmodeElement = document.getElementById("filterbarmode");
-      const indicatorElement = document.getElementById("loadingindicator");
-      const infinitescrollingElement = document.getElementById("enableinfinitescrolling");
-      let filterbarCheckElement = filterbarElement?.querySelector('.e-checkbox-wrapper');
-      let barStatusCheckElement = barstatusElement?.querySelector('.e-checkbox-wrapper');
-      let infinitescrollingCheckElement = infinitescrollingElement?.querySelector('.e-checkbox-wrapper');
+      const loadingIndicatorElement = document.getElementById("loadingindicator");
+      const checkboxmodedefaultElement = document.getElementById("checkboxmodedefault");
 
-      if (value === "Menu" || value === "Excel" || value === "CheckBox") {
-        filterbarCheckElement!.classList.add("e-checkbox-disabled");
-        filterbarCheckElement!.setAttribute("disabled", "true");
-        barStatusCheckElement!.classList.add("e-checkbox-disabled");
-        barStatusCheckElement!.setAttribute("disabled", "true");
-        dropRef['filterbarmode'].enabled = false;
-        filterbarmodeElement!.classList.add("e-disabled");
-        filterbarmodeElement!.setAttribute("disabled", "true");
-        if (value === "Excel" || value === "CheckBox") {
-          dropRef['loadingindicator'].enabled = true;
-          indicatorElement!.classList.remove("e-disabled");
-          indicatorElement!.removeAttribute("disabled");
-          infinitescrollingCheckElement!.classList.remove("e-checkbox-disabled");
-          infinitescrollingCheckElement!.removeAttribute("disabled");
-        } else {
-          if (value === "Menu") {
-            dropRef['loadingindicator'].enabled = false;
-            indicatorElement!.classList.add("e-disabled");
-            indicatorElement!.setAttribute("disabled", "true");
-            infinitescrollingCheckElement!.classList.add("e-checkbox-disabled");
-            infinitescrollingCheckElement!.setAttribute("disabled", "true");
+      setDisableValues((prev) => {
+        const update = { ...prev };
+
+        if (selectedListItem === "Edit Settings") {
+          const editMode = dropRef['editmode'].value;
+          update.confirmdialog = true;
+          checkRef['confirmdialog'].disabled = true;
+
+          if (editMode === "Dialog") {
+            update.nextrowedit = true;
+            update.newrowposition = false;
+          } else if (editMode === "Normal") {
+            update.nextrowedit = false;
+            update.newrowposition = true;
+          } else if (editMode === "Batch") {
+            update.confirmdialog = false;
+            checkRef['confirmdialog'].disabled = false;
+            update.nextrowedit = false;
+            update.newrowposition = true;
+          } 
+          else {
+            update.confirmdialog = false;
+            update.nextrowedit = false;
+            update.newrowposition = true;
           }
-        }
-      } else {
-        filterbarCheckElement!.classList.remove("e-checkbox-disabled");
-        filterbarCheckElement!.removeAttribute("disabled");
-        barStatusCheckElement!.classList.remove("e-checkbox-disabled");
-        barStatusCheckElement!.removeAttribute("disabled");
-        dropRef['filterbarmode'].enabled = true;
-        filterbarmodeElement!.classList.remove("e-disabled");
-        filterbarmodeElement!.removeAttribute("disabled");
-        if (value === "FilterBar") {
-          dropRef['loadingindicator'].enabled = false;
-          indicatorElement!.classList.add("e-disabled");
-          indicatorElement!.setAttribute("disabled", "true");
-          infinitescrollingCheckElement!.classList.add("e-checkbox-disabled");
-          infinitescrollingCheckElement!.setAttribute("disabled", "true");
+
+          checkRef['nextrowedit'].disabled = update.nextrowedit;
+          dropRef['newrowposition'].enabled = update.newrowposition;
+          menuItemMethods.setElementState(newrowpositionElement, update.newrowposition);
         }
 
+        else if (selectedListItem === "Filter Settings") {
+          const filterType = dropRef['filtertype'].value;
+
+          const isFilterBar = filterType === "FilterBar";
+          const isExcelOrCheckBox = filterType === "Excel" || filterType === "CheckBox";
+          const isMenu = filterType === "Menu";
+
+          update.filterbar = !isFilterBar;
+          update.barstatus = !isFilterBar;
+          update.filterbarmode = isFilterBar;
+          update.loadingindicator = isExcelOrCheckBox;
+          update.enableinfinitescrolling = !isFilterBar && !isMenu;
+
+          checkRef['filterbar'].disabled = update.filterbar;
+          checkRef['barstatus'].disabled = update.barstatus;
+          dropRef['filterbarmode'].enabled = update.filterbarmode;
+          dropRef['loadingindicator'].enabled = update.loadingindicator;
+          checkRef['enableinfinitescrolling'].disabled = !update.enableinfinitescrolling;
+
+          menuItemMethods.setElementState(filterbarmodeElement, update.filterbarmode);
+          menuItemMethods.setElementState(loadingIndicatorElement, update.loadingindicator);
+        }
+
+        else if (selectedListItem === "Selection Settings") {
+          const selectionType = dropRef['selectiontype'].value;
+          const isMultiple = selectionType === "Multiple";
+
+          update.simplemultirow = !isMultiple;
+          update.toggle = false;
+          update.checkboxselection = !isMultiple;
+          update.persistselection = true;
+          update.checkboxonly = true;
+          update.checkboxmodedefault = true;
+
+          checkRef['simplemultirow'].disabled = update.simplemultirow;
+          checkRef['toggle'].disabled = update.toggle;
+          checkRef['checkboxselection'].disabled = update.checkboxselection;
+          checkRef['persistselection'].disabled = update.persistselection;
+          checkRef['checkboxonly'].disabled = update.checkboxonly;
+          dropRef['checkboxmodedefault'].disabled = update.checkboxmodedefault;
+          menuItemMethods.setElementState(checkboxmodedefaultElement, !update.checkboxmodedefault);
+        }
+
+        Object.assign(disableValues, update);
+        return update;
+      });
+    },
+    
+    toggleListItem: (itemText: string, enable: boolean, listObj: any, dropdownDataSource: any) => {
+      const index = dropdownDataSource.listViewData.findIndex((item: any) => item.text === itemText);
+      if (index !== -1 && listObj) {
+        enable ? listObj.enableItem(dropdownDataSource.listViewData[index]) : listObj.disableItem(dropdownDataSource.listViewData[index]);
       }
     },
 
-
-    disableDropdownItem: (data: any, dropRef: any, id: string) => {
-      if (gridInstance.enableVirtualization || gridInstance.enableInfiniteScrolling) {
-        dropRef["editmode"].dataSource = dropdownDataSource.editModeModified;
-        dropRef["newrowposition"].enabled = false;
-      } else {
-        dropRef["editmode"].dataSource = dropdownDataSource.editMode;
-        dropRef["newrowposition"].enabled = true;
+    toggleElement: (elementId: string, enable: boolean) => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.classList.toggle("e-disabled", !enable);
+        el.toggleAttribute("disabled", !enable);
       }
     },
 
-    selectionTypeChange: (value: any, dropRef: any) => {
-      const selectionTypeItems = document.getElementById("simplemultirow");
-      const checkboxSelection = document.getElementById("checkboxonly");
+    checkboxValueChange: (selectedListItem: string, items: GridPropertiesConfig, checkRef: any, dropRef: any) => {
+      setDisableValues(prev => {
+        const updateCheckboxState = (key: string, state: boolean) => {
+          checkRef[key].disabled = prev[key] = !state;
+        };
 
-      const simpleMultiRowCheckbox = selectionTypeItems?.querySelector('.e-checkbox-wrapper') as HTMLElement;
-      const simpleMultiRowInput = selectionTypeItems?.querySelector('input[type="checkbox"]') as any;
+        switch (selectedListItem) {
+          case "Header Settings":
+            menuItemMethods.toggleListItem("Filter Settings", checkRef['filtering'].checked, listObj, dropdownDataSource);
+            updateCheckboxState("multisorting", checkRef['sorting'].checked);
+            menuItemMethods.toggleListItem("Group Settings", checkRef['grouping'].checked, listObj, dropdownDataSource);
+            break;
 
-      const checkboxOnlyCheckbox = checkboxSelection?.querySelector('.e-checkbox-wrapper') as HTMLElement;
-      const checkboxOnlyInput = checkboxSelection?.querySelector('input[type="checkbox"]') as any;
+          case "Grid Settings":
+            menuItemMethods.toggleListItem("Selection Settings", checkRef['selection'].checked, listObj, dropdownDataSource);
+            updateCheckboxState("autofit", checkRef['column_menu'].checked);
+            break;
 
-      const disableCheckbox = (checkbox: HTMLElement | null, input: HTMLInputElement | null) => {
-        checkbox?.classList.add("e-checkbox-disabled");
-        checkbox?.setAttribute("disabled", "true");
-        if (input) input.checked = false; // uncheck if disabled
-      };
+          case "Selection Settings":
+            const isCheckboxSelected = checkRef['checkboxselection'].checked;
+            dropRef['selectiontype'].dataSource = isCheckboxSelected ? dropdownDataSource.selectiontype : dropdownDataSource.selectiontypeModified;
+            dropRef['selectiontype'].value = dropdownValues['selectiontype'];
 
-      const enableCheckbox = (checkbox: HTMLElement | null) => {
-        checkbox?.classList.remove("e-checkbox-disabled");
-        checkbox?.removeAttribute("disabled");
-      };
+            ["simplemultirow", "toggle"].forEach(key => updateCheckboxState(key, !isCheckboxSelected));
+            ["persistselection", "checkboxonly"].forEach(key => updateCheckboxState(key, isCheckboxSelected));
+            dropRef['checkboxmodedefault'].disabled = prev.checkboxmodedefault = !isCheckboxSelected;
+            menuItemMethods.toggleElement("checkboxmodedefault", isCheckboxSelected);
+            break;
 
-      switch (value) {
-        case 'Single':
-          disableCheckbox(simpleMultiRowCheckbox, simpleMultiRowInput);
-          if (dropRef['checkboxmodedefault'].value !== 'ResetOnRowClick') {
-            enableCheckbox(checkboxOnlyCheckbox);
-          }
-          if (!isNullOrUndefined(simpleMultiRowInput.ej2_instances)) {
-            simpleMultiRowInput.ej2_instances[0].checked = false;
-            gridInstance.selectionSettings.enableSimpleMultiRowSelection = false;
-          }
-          setCheckboxValues((prev) => {
-            prev.simplemultirow = false;
-            Object.keys(checkboxValues).forEach((prop) => {
-              checkboxValues[prop] = prev[prop];
-            });
-            return prev;
-          });
-          break;
+          case "Edit Settings":
+            const isEditing = checkRef['editing'].checked;
+            ["nextrowedit", "editondoubleclick"].forEach(key => updateCheckboxState(key, isEditing));
+            dropRef['editmode'].enabled = prev.editMode = isEditing;
+            menuItemMethods.toggleElement("editmode", isEditing);
 
-        case 'Multiple':
-          enableCheckbox(simpleMultiRowCheckbox);
-          if (dropRef['checkboxmodedefault'].value !== 'ResetOnRowClick') {
-            enableCheckbox(checkboxOnlyCheckbox);
-          }
-          break;
+            const isDialogMode = dropRef['editmode'].value === 'Dialog';
+            const newRowEnabled = isEditing && !isDialogMode;
+            dropRef['newrowposition'].enabled = prev.newrowposition = newRowEnabled;
+            menuItemMethods.toggleElement("newrowposition", newRowEnabled);
 
-        case 'Default':
-          enableCheckbox(checkboxOnlyCheckbox);
-          if (dropRef['selectiontype'].value === 'Single') {
-            disableCheckbox(simpleMultiRowCheckbox, simpleMultiRowInput);
-          } else {
-            enableCheckbox(simpleMultiRowCheckbox);
-          }
-          break;
+            updateCheckboxState("deletedialog", checkRef['deleting'].checked);
 
-        case 'ResetOnRowClick':
-          dropRef['selectiontype'].value = 'Single';
-          disableCheckbox(simpleMultiRowCheckbox, simpleMultiRowInput);
-          disableCheckbox(checkboxOnlyCheckbox, checkboxOnlyInput);
-          gridInstance.selectionSettings.enableSimpleMultiRowSelection = false;
-          break;
+            const isAdding = checkRef['adding'].checked;
+            const addRowEnabled = isAdding && !isDialogMode;
+            dropRef['newrowposition'].enabled = prev.newrowposition = addRowEnabled;
+            menuItemMethods.toggleElement("newrowposition", addRowEnabled);
+            break;
+        }
 
-        default:
-          break;
-      }
-    }
+        Object.keys(disableValues).forEach(prop => {
+          disableValues[prop] = prev[prop];
+        });
+
+        return prev;
+      });
+    },
+
   };
 
   const menuItemProperties = {
@@ -1668,7 +1793,6 @@ export const App = () => {
           },
           { text: 'Enable Resizing', method: menuItemMethods.enableColumnResize, singlecheckbox: true },
           { text: 'Enable Grouping', method: menuItemMethods.enableColumnGrouping, singlecheckbox: true },
-          { text: 'Enable Text Wrap', method: menuItemMethods.singleColumnSettingsTextWrap, singlecheckbox: false }
         ],
       },
     ]
@@ -1676,56 +1800,57 @@ export const App = () => {
   };
 
   const propertyDescription: { [key: string]: string } = {
-    "Enable Editing": "Allows editing the cell content in this specific column. If true, the user can modify the cell value in-place.",
-    "Enable Reordering": "Allows the user to drag and reorder this column among others in the grid.",
-    "Enable Searching": "If enabled, this column's values will be included in global search operations (like search textbox above the grid).",
-    "Enable Resizing": "Enables users to adjust the width of the column by dragging its header edge.",
-    "Enable Sorting": "The allowSorting property enables the sorting of grid records when clicking on the column header.",
-    "Enable Multi-Column Sorting": "The allowMultiSorting property enables the user to sort multiple column in the grid.",
-    "Enable Filtering": "The allowFiltering property enables the filter bar to be displayed.",
-    "Enable Grouping": "The allowGrouping property allows dynamically grouping or ungrouping columns. Grouping can be done by dragging and dropping columns from the column header to the group drop area",
-    "Enable Column Reordering": "The allowReordering property enables the reordering of grid columns by dragging and dropping columns from one index to another",
-    "Enable Column Resizing": "The allowResizing property enables the resizing of grid columns.",
-    "Enable Paging": "The allowPaging property enables a pager control to be rendered at the bottom of the grid, allowing you to navigate through different pages of data.",
+    "Enable Editing": "All columns are editable by default. To disable editing for specific columns, you can update their value by setting the appropriate property.",
+    "Enable Reordering": "The boolean value that indicates whether users can reorder columns in the Grid by dragging and dropping them. When the Grid is rendered with stacked headers, column reordering is restricted to columns within the same header level.",
+    "Enable Searching": "All columns in the Grid are searchable by default. To disable search for a specific column, set its property to false in the column.",
+    "Enable Resizing": "The boolean value that indicates whether users can adjust the width of a column by dragging its header edge. By default, resizing is allowed for all columns. To disable resizing for a specific column, set its property to false.",
+    "Enable Sorting": "Enables sorting of grid columns by clicking the sort icon in the column header. The first click sorts the data in ascending order, and subsequent clicks toggle between ascending and descending. To disable sorting for a specific column, set allowSorting to false.",
+    "Enable Multi-Column Sorting": "When sorting is enabled, users can sort multiple columns by holding Shift or Ctrl while clicking on the column headers.",
+    "Enable Filtering": "A boolean value that controls the visibility of the filter bar for all grid columns. Users can customize the filter type using the type property. To disable filtering for a specific column, set its allowFiltering property to false.",
+    "Enable Grouping": "Enables users to group or ungroup grid columns by dragging headers to the group drop area. To disable grouping for a specific column, set its allowGrouping property to false.",
+    "Show Grouped Column Reordering": "Enables reordering of grouped grid columns in the droping area. To disable reordering for a specific column, set its property to false.",
+    "Enable Column Reordering": "Enables reordering of grid columns by dragging and dropping. To disable reordering for a specific column, set its property to false.",
+    "Enable Column Resizing": "Enables resizing of grid columns by dragging the edge of the column header. To disable resizing for a specific column, set its property to false.",
+    "Enable Paging": "Enables a pager at the footer of the grid, allowing users to navigate through pages of data.",
     "Enable Immutable Mode": "The enableImmutableMode property is set to true, the grid will reuse old rows if it exists in the new result instead of full refresh while performing the grid actions.",
-    "Allow Selection": "Various features enable selection processing in the Grid, including drag, hover, and focus interactions.",
-    "Enable Row Drag and Drop": "The allowRowDragAndDrop property is set to true, you can drag and drop grid rows at another grid",
-    "Show Column Menu": "The showColumnMenu property is set to true, it will enable the column menu options in each columns.",
-    "Allow Text Wrap": "The allowTextWrap property is set to true, then text content will wrap to the next line when its text content exceeds the width of the Column Cells.",
-    "Auto-Fit Column Content": "The autoFit property, when enabled, automatically adjusts the width of columns based on the given width.",
-    "Enable Alternate Row Styling": "The enableAltRow property is set to true, the grid will render with e-altrow CSS class to the alternative tr elements.",
-    "Enable Row Hover Effect": "The enableHover property is set to true, the row hover is enabled in the Grid.",
+    "Enable Row Drag and Drop": "Enables users to drag and drop grid rows within the grid or to another.",
+    "Show Column Menu": "A boolean value enables column menu options for each column when set to true. To disable the column menu for a specific column, set its property to false.",
+    "Allow Text Wrap": "Enables text in column cells to wrap to the next line when it exceeds the column width.",
+    "Auto-Fit Column Content": "A boolean value that determines whether column widths automatically adjust based on the grid's width. If not defined, columns expand to fill the available space.",
+    "Enable Alternate Row Styling": "Enables alternate row styling in the grid for better readability. When set to true, the grid applies the e-altrow CSS class to every other row.",
+    "Enable Row Hover Effect": "A boolean value that enables row hover effects in the grid. When set to true, the e-hover CSS class is applied to rows on hover for visual feedback.",
     "Enable Header Focus": "The enableHeaderFocus is set to true, then header element will be focused when focus moves to grid.",
-    "Enable Excel Export": "Export the Grid to Excel.",
-    "Enable PDF Export": "Export the Grid to PDF",
+    "Enable Excel Export": "A boolean value indicating whether users can export the grid to an Excel file. When set to true, Excel export is enabled.",
+    "Enable PDF Export": "A boolean value indicating whether users can export the grid to Pdf. When set to true, Pdf export is enabled.",
     "Enable Virtual Scrolling": "The enableVirtualization property allows the Grid to render only the rows visible within the viewport and load subsequent rows on vertical scrolling. This helps in efficiently handling large datasets in the Grid.",
-    "Enable Infinite Scrolling": "The enableInfiniteScrolling property is set to true, then the data will be loaded in Checkbox filter Popup content, when the scrollbar reaches the end. This helps to load large dataset in Checkbox filter Popup content.",
-    "Show Group Drop Area": "The showDropArea property makes the group drop area element visible at the top of the Grid.",
-    "Show Grouped Columns": "The showGroupedColumn property is set to false, it hides the grouped column after grouping.",
-    "Show Toggle Button": "The showToggleButton property is set to true, then the toggle button will be showed in the column headers which can be used to group or ungroup columns by clicking them.",
-    "Show Ungroup Icon in Header": "The showUngroupButton property is set to false, then ungroup button is hidden in dropped element. It can be used to ungroup the grouped column when click on ungroup button.",
-    "Enable Case Sensitivity": "The enableCaseSensitivity property is set to true then searches grid records with exact match based on the filter operator. It will have no effect on number, boolean and Date fields.",
-    "Ignore accent": "The ignoreAccent property is set to true, then filter ignores the diacritic characters or accents while filtering or searching.",
-    "Filter Type": "It provides various filter options such as menu, Excel-like filtering, filter bar, and checkboxes to refine and search data efficiently.",
-    "Show Filter Bar Operator": "The showFilterBarOperator property is set to true, then it renders the dropdownlist component to select the operator in filterbar input.",
-    "Show Filter Bar Status": "The filterBarStatus propperty is set to true, shows or hides the filtered status message on the pager.",
-    "Filter Bar Mode": "Filter bar modes define how filtering is triggered in the grid, either manually on Enter key press (OnEnter) or automatically after a delay (Immediate).",
-    "Loading Indicator Type": "Display a loading indicator while the data is being loaded.",
-    "Enable Toggle Selection": "The enableToggle property is set to true, then the user can able to perform toggle for the selected row.",
-    "Enable Column Selection": "The allowColumnSelection is set to true, then the user can able to select the columns.",
-    "Selection Type": "Specifies the selection types: Single (selects one row or cell) and Multiple (selects multiple rows or cells).",
-    "Enable Simple Multi Row Selection": "The enableSimpleMultiRowSelection property is set to true, then the user can able to perform multiple row selection with single clicks.",
-    "Allow Checkbox Selection Only": "The checkboxOnly property is set to true, then the Grid selection is allowed only through checkbox.",
-    "Checkbox Selection Mode": "The Checkbox selection mode controls how rows are selected: 'Default' allows selecting multiple rows one by one, while 'ResetOnRowClick' clears previous selections and selects only the current row.",
-    "Edit Mode": "Specifies the editing mode for the grid.",
-    "Allow Adding Row": "The allowAdding property is set to true, new records can be added to the Grid.",
-    "Allow Next Row Edit": "The allowNextRowEdit is set to true, editing is done to next row. By default allowNextRowEdit is set to false.",
-    "New Row Position": "Specifies where a new row is added in the grid.",
-    "Allow Editing Row": "The allowEditing is set to true, values can be updated in the existing record.",
-    "Edit on Double Click": "The allowEditOnDblClick is set to false, Grid will not allow editing of a record on double click.",
-    "Allow Delete Row": "The allowDeleting property is set to true, existing record can be deleted from the Grid.",
-    "Show Confirmation Dialog": "The showConfirmDialog is set to false, confirm dialog does not show when batch changes are saved or discarded.",
-    "Show Delete Confirmation Dialog": "The showDeleteConfirmDialog is set to true, confirm dialog will show delete action. You can also cancel delete command.",
+    "Enable Infinite Scrolling": "Loads and filters data continuously as you scroll, without needing to navigate through pages. This helps in handling large datasets smoothly.",
+    "Show Group Drop Area": "A boolean value that controls the visibility of the group drop area at the top of the grid. When set to true, the drop area is displayed.",
+    "Show Grouped Columns": "The grouped column is hidden from the grid after grouping, when it is set to false. The grouped column remains visible in the grid, when it is set to true.",
+    "Show Toggle Button": "The toggle button appears in the column headers, allowing users to group or ungroup columns by clicking it, when it is set to true.",
+    "Show Ungroup Icon in Header": "The ungroup button is visible in the drop area of a grouped column when it is set to true, allowing users to ungroup the column by clicking the button.",
+    "Enable Case Sensitivity": "The grid filters records with exact case-sensitive matches based on the filter operator, when it is set to true.",
+    "Ignore Accent": "The filter ignores diacritic characters or accents during filtering, when it is set to true.",
+    "Filter Type": "Filter the records in the grid using various options such as menu, Excel-style filtering, filter bar, and checkboxes to efficiently refine and search data.",
+    "Show Filter Bar Operator": "Enables a dropdown in the filter bar to select operators, and customizes filter menu operators based on column type—string, number, date, or boolean.",
+    "Show Filter Bar Status": "Displays or hides the filtered status message on the pager when filtering by the specified text.",
+    "Filter Bar Mode": "Filter bar modes control how filtering is triggered—either manually by pressing Enter (OnEnter) or automatically after a delay (Immediate), with a default delay of 1500ms.",
+    "Loading Indicator Type": "Displays a visual indicator (like a spinner or shimmer) to show that filtering is in progress, improving user feedback during data operations.",
+    "Enable Toggle Selection": "Allows users to toggle row selection by clicking on the selected row again.",
+    "Enable Column Selection": "Allows users to select one or more columns in the grid, depending on the configured selection type.",
+    "Selection Type": "Selection can be either single, allowing one row to be selected, or multiple, allowing selection of multiple rows.",
+    "Enable Simple Multi Row Selection": "Enables multiple row selection with single clicks, without requiring Ctrl or modifier keys, when it is set to true.",
+    "Enable CheckBox Selection": "Enables or disables the visibility of the checkbox column in the grid when it is set to true.",
+    "Allow Checkbox Selection Only": "The row selection in the grid is allowed only through the checkbox column, when it is set to true.",
+    "Checkbox Selection Mode": "The checkbox selection mode defines how rows are selected: In Default mode, users can select multiple rows one by one using either checkboxes or row clicks. In ResetOnRowClick mode, multiple selections are allowed through checkbox clicks, but clicking directly on a row clears all previous selections and selects only that row.",
+    "Edit Mode": "Defines the editing mode: Normal for inline editing, Dialog for popup editing, and Batch for editing multiple cells before saving.",
+    "Allow Adding Row": "The addition of new rows to the grid is allowed when it is set to true. If it is set to false, adding new rows is not permitted.",
+    "Allow Next Row Edit": "The editing automatically moves to the next row after completing the current one, when it is set to true.",
+    "New Row Position": "Specifies whether a new row is added at the top or bottom of the grid when set to true. If set to false, new rows cannot be added.",
+    "Allow Editing Row": "The values in existing records can be updated on single click, when it is set to true. If it is set to false, editing of records is not allowed.",
+    "Edit on Double Click": "The values in existing records can be deleted directly from the grid by double-clicking, when it is set to true. If it is set to false, deleting records through double-click is not allowed.",
+    "Allow Delete Row": "The values in existing records can be deleted from the grid, when it is set to true. If it is set to false, deleting of records is not allowed.",
+    "Show Unsaved Confirmation Dialog": "The confirmation dialog appears when batch changes are saved or discarded, when it is set to true. Otherwise, the confirmation dialog will not be shown.",
+    "Show Delete Confirmation Dialog": "The confirmation dialog appears before the delete action is performed, when it is set true. Otherwise, the confirmation dialog will not be shown.",
     "Localization": "Localization is the process of adapting software, content, or applications to a specific region, language, or culture by translating text, formatting data, and modifying UI elements to align with local preferences.",
     "Theme": "A theme is a predefined set of visual styles, including colors, fonts, and layout, that determines the look and feel of an application or website. It helps create a consistent design across the entire interface.",
     "Interaction Type": "Interaction types are the various ways users engage with a system, such as clicking, typing, or touching.",
@@ -1744,7 +1869,7 @@ export const App = () => {
     "Group_Aggregate_Min": "Displays the smallest value in the column.",
     "Group_Aggregate_Max": "Displays the largest value in the column.",
     "Group_Aggregate_Count": "Shows the number of records in the column.",
-    "Allow selection": "The allowSelection property is set to true, it allows selection of (highlight row) Grid records by clicking it",
+    "Allow Selection": "A boolean value that determines whether grid records can be selected by clicking on it.",
     "Type": "Specifies the available filtering types, determining how data is filtered in the grid.",
     "Clip Mode": "Specifies how overflowed cell content is displayed in the grid.",
     "Freeze": "Specifies the column freeze direction in the grid.",
@@ -1811,7 +1936,7 @@ export const App = () => {
     "GridLine_Vertical": "Displays the vertical grid lines only.",
     "GridLine_Horizontal": "Displays the horizontal grid lines only.",
     "GridLine_None": "No grid lines are displayed.",
-    "Persist Selection": "The persistSelection is set to true, the Grid selection is maintained across all operations, and at least one column must be enabled as the primary key to persist the selection.",
+    "Persist Selection": "Row selection is retained across grid operations when it is set to true, and at least one column must be defined as a primary key.",
     "Enable Text Wrap": "When the cell/header content exceeds the column width, it wraps onto multiple lines to ensure the entire text is visible."
   };
 
@@ -1886,7 +2011,7 @@ export const App = () => {
         setSelectedField(selectedField);
         setSelectedDataType(mappedType);
         operatorOptions = operatorMap[mappedType];
-        if (operatorDropdown && operatorDropdown.current) {
+        if (operatorDropdown) {
           operatorDropdown.current.dataSource = operatorOptions;
         }
         setSelectedOperator(null);
@@ -1999,6 +2124,10 @@ export const App = () => {
     },
 
     menuTextboxSearch: () => {
+      const dialogContainer = document.getElementById('dialogbox');
+      if (dialogContainer) {
+        dialogContainer.remove();
+      }
       return (
         <div className="search-container">
           <TextBoxComponent
@@ -2413,6 +2542,10 @@ export const App = () => {
     filterOptions: { showFilterBarOperator: false, showFilterBarStatus: false } as FilterSettingsModel,
     toolbarOptions: [
       { text: '', prefixIcon: 'e-add', id: 'add_icon', tooltipText: 'Add Records' },
+      'Edit',
+      'Delete',
+      'Update',
+      'Cancel',
       { type: 'Separator' },
       { text: '', prefixIcon: 'sf-icon-expand-collapse', id: 'expand_icon', tooltipText: 'Expand/Collapse' },
       { text: '', prefixIcon: 'sf-icon-clear-sorting', id: 'clearsorting_icon', tooltipText: 'Clear Sorting' },
@@ -2432,6 +2565,7 @@ export const App = () => {
       'ColumnChooser',
       { text: '', align: 'Right', id: 'grid_properties', template: gridCommonTemplates.settingsDialogTemplate }
     ] as (ToolbarItems | Object)[],
+
     pageOptions: { pageCount: 5, pageSizes: [5, 10, 12, 20, 30], pageSize: 30 },
     groupOptions: { allowReordering: true },
     editOptions: { allowEditing: true, allowAdding: true, allowDeleting: true, showDeleteConfirmDialog: true, showConfirmDialog: true, mode: 'Normal' as EditMode },
@@ -2464,7 +2598,6 @@ export const App = () => {
         allowFiltering: false,
         disableHtmlEncode: false,
         template: gridCommonTemplates.imageTemplate,
-        //editType: 'dropdownedit',
         editTemplate: gridCommonTemplates.genderEditTemplate
       },
       {
@@ -2602,7 +2735,7 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'groupreordering', label: 'Enable Column Reordering', defaultChecked: true },
+          { id: 'groupreordering', label: 'Show Grouped Column Reordering', defaultChecked: true },
           { id: 'showdroparea', label: 'Show Group Drop Area', defaultChecked: true },
           { id: 'showgroupedcolumn', label: 'Show Grouped Columns', defaultChecked: false },
           { id: 'showtogglebutton', label: 'Show Toggle Button', defaultChecked: false },
@@ -2614,12 +2747,12 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'sorting', label: 'Enable Sorting', defaultChecked: true },
-          { id: 'multisorting', label: 'Enable Multi-Column Sorting', defaultChecked: true },
-          { id: 'filtering', label: 'Enable Filtering', defaultChecked: true },
-          { id: 'grouping', label: 'Enable Grouping', defaultChecked: true },
-          { id: 'reordering', label: 'Enable Column Reordering', defaultChecked: true },
-          { id: 'resizing', label: 'Enable Column Resizing', defaultChecked: true }
+          { id: 'sorting', label: 'Enable Sorting', defaultChecked: true, disabled: false, method: menuItemMethods.checkboxValueChange },
+          { id: 'multisorting', label: 'Enable Multi-Column Sorting', defaultChecked: true, disabled: false },
+          { id: 'filtering', label: 'Enable Filtering', defaultChecked: true, disabled: false, method: menuItemMethods.checkboxValueChange },
+          { id: 'grouping', label: 'Enable Grouping', defaultChecked: true, disabled: false, method: menuItemMethods.checkboxValueChange },
+          { id: 'reordering', label: 'Enable Column Reordering', defaultChecked: true, disabled: false },
+          { id: 'resizing', label: 'Enable Column Resizing', defaultChecked: true, disabled: false }
         ]
       }
     ],
@@ -2627,28 +2760,28 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'selection', label: 'Allow Selection', defaultChecked: true },
-          { id: 'textwrap', label: 'Allow Text Wrap', defaultChecked: false },
-          { id: 'paging', label: 'Enable Paging', defaultChecked: true },
-          { id: 'draganddrop', label: 'Enable Row Drag and Drop', defaultChecked: false },
-          { id: 'autofit', label: 'Auto-Fit Column Content', defaultChecked: true },
-          { id: 'column_menu', label: 'Show Column Menu', defaultChecked: false },
+          { id: 'selection', label: 'Allow Selection', defaultChecked: true, method: menuItemMethods.checkboxValueChange, disabled: false },
+          { id: 'textwrap', label: 'Allow Text Wrap', defaultChecked: false, disabled: false },
+          { id: 'paging', label: 'Enable Paging', defaultChecked: true, disabled: false },
+          { id: 'draganddrop', label: 'Enable Row Drag and Drop', defaultChecked: false, disabled: false },
+          { id: 'autofit', label: 'Auto-Fit Column Content', defaultChecked: true, disabled: true },
+          { id: 'column_menu', label: 'Show Column Menu', defaultChecked: false, disabled: false, method: menuItemMethods.checkboxValueChange },
           { id: 'general_grid', type: 'Separator' }
         ]
       },
       {
         groupField: 'Appearance & Interaction',
         items: [
-          { id: 'altrow', label: 'Enable Alternate Row Styling', defaultChecked: false },
-          { id: 'hover', label: 'Enable Row Hover Effect', defaultChecked: true },
+          { id: 'altrow', label: 'Enable Alternate Row Styling', defaultChecked: false, disabled: false },
+          { id: 'hover', label: 'Enable Row Hover Effect', defaultChecked: true, disabled: false },
           { id: 'grid_appearance', type: 'Separator' }
         ]
       },
       {
         groupField: 'Data Export',
         items: [
-          { id: 'excelexport', label: 'Enable Excel Export', defaultChecked: true },
-          { id: 'pdfexport', label: 'Enable PDF Export', defaultChecked: true }
+          { id: 'excelexport', label: 'Enable Excel Export', defaultChecked: true, disabled: false },
+          { id: 'pdfexport', label: 'Enable PDF Export', defaultChecked: true, disabled: false }
         ]
       }
     ],
@@ -2657,26 +2790,30 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'enablecasesensitivity', label: 'Enable Case Sensitivity', defaultChecked: false },
-          { id: 'ignoreaccent', label: 'Ignore Accent', defaultChecked: false },
-          { id: 'filtertype', label: 'Filter Type', marginLeft: '49%', marginRTL: '44%', type: 'dropdown', dataSource: dropdownDataSource.filterBarTypeOptions, placeholder: selectedFilterType, method: menuItemMethods.handleFilterTypeChange, value: selectedFilterType },
+          { id: 'enablecasesensitivity', label: 'Enable Case Sensitivity', defaultChecked: false, disabled: false },
+          { id: 'ignoreaccent', label: 'Ignore Accent', defaultChecked: false, disabled: false },
+          {
+            id: 'filtertype', label: 'Filter Type', marginLeft: '49%', marginRTL: '44%', type: 'dropdown', dataSource: dropdownDataSource.filterBarTypeOptions, placeholder: selectedFilterType,
+            method: menuItemMethods.dropdownValueChange, disabled: false,
+            value: selectedFilterType
+          },
           { id: 'grid_filter', type: 'Separator' }
         ]
       },
       {
         groupField: 'Filter Bar Settings',
         items: [
-          { id: 'filterbar', label: 'Show Filter Bar Operator', defaultChecked: false },
-          { id: 'barstatus', label: 'Show Filter Bar Status', defaultChecked: false },
-          { id: 'filterbarmode', label: 'Filter Bar Mode', marginLeft: '42%', marginRTL: '37%', type: 'dropdown', dataSource: dropdownDataSource.filterBarModeOptions, placeholder: selectedFilterBarMode, value: selectedFilterBarMode },
+          { id: 'filterbar', label: 'Show Filter Bar Operator', defaultChecked: false, disabled: false },
+          { id: 'barstatus', label: 'Show Filter Bar Status', defaultChecked: false, disabled: false },
+          { id: 'filterbarmode', label: 'Filter Bar Mode', marginLeft: '42%', marginRTL: '37%', type: 'dropdown', dataSource: dropdownDataSource.filterBarModeOptions, placeholder: selectedFilterBarMode, value: selectedFilterBarMode, disabled: false },
           { id: 'grid_filter_bar', type: 'Separator' }
         ]
       },
       {
         groupField: 'Excel / Checkbox Filter Settings',
         items: [
-          { id: 'enableinfinitescrolling', label: 'Enable Infinite Scrolling', defaultChecked: false },
-          { id: 'loadingindicator', label: 'Loading Indicator Type', marginLeft: '34%', marginRTL: '25%', type: 'dropdown', dataSource: dropdownDataSource.indicators, placeholder: selectedIndicator, value: selectedIndicator }
+          { id: 'enableinfinitescrolling', label: 'Enable Infinite Scrolling', disabled: true, defaultChecked: false },
+          { id: 'loadingindicator', label: 'Loading Indicator Type', disabled: true, marginLeft: '34%', marginRTL: '25%', type: 'dropdown', dataSource: dropdownDataSource.indicators, placeholder: selectedIndicator, value: selectedIndicator }
         ]
       },
     ],
@@ -2684,33 +2821,40 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'editmode', label: 'Edit Mode', type: 'dropdown', dataSource: dropdownDataSource.editMode, dataFields: { text: 'text', value: 'value', disabled: 'isDisabled' }, method: menuItemMethods.disableDropdownItem, marginLeft: '48%', marginRTL: '44%', placeholder: selectEditMode, value: selectEditMode },
-          { id: 'nextrowedit', label: 'Allow Next Row Edit', defaultChecked: true },
+          {
+            id: 'editmode', label: 'Edit Mode', type: 'dropdown', disabled: false, dataSource: dropdownDataSource.editMode, dataFields: { text: 'text', value: 'value', disabled: 'isDisabled' },
+            method: menuItemMethods.dropdownValueChange,
+            marginLeft: '48%', marginRTL: '44%', placeholder: selectEditMode, value: selectEditMode
+          },
+          { id: 'nextrowedit', label: 'Allow Next Row Edit', defaultChecked: true, disabled: false },
+          {
+            id: 'confirmdialog', label: 'Show Unsaved Confirmation Dialog',
+            defaultChecked: true, disabled: true, method: menuItemMethods.checkboxValueChange,
+          },
           { id: 'grid_edit', type: 'Separator' }
         ]
       },
       {
         groupField: 'Add Action Settings',
         items: [
-          { id: 'adding', label: 'Allow Adding Row', defaultChecked: true },
-          { id: 'newrowposition', label: 'New Row Position', type: 'dropdown', marginLeft: '39%', marginRTL: '33%', dataSource: dropdownDataSource.newRowPosition, placeholder: selectNewRowPosition, value: selectNewRowPosition },
+          { id: 'adding', label: 'Allow Adding Row', defaultChecked: true, disabled: false, method: menuItemMethods.checkboxValueChange, },
+          { id: 'newrowposition', label: 'New Row Position', type: 'dropdown', disabled: false, marginLeft: '39%', marginRTL: '33%', dataSource: dropdownDataSource.newRowPosition, placeholder: selectNewRowPosition, value: selectNewRowPosition },
           { id: 'grid_add', type: 'Separator' }
         ]
       },
       {
         groupField: 'Edit Action Settings',
         items: [
-          { id: 'editing', label: 'Allow Editing Row', defaultChecked: true },
-          { id: 'editondoubleclick', label: 'Edit on Double Click', defaultChecked: true },
-          { id: 'confirmdialog', label: 'Show Confirmation Dialog', defaultChecked: true },
+          { id: 'editing', label: 'Allow Editing Row', disabled: false, defaultChecked: true, method: menuItemMethods.checkboxValueChange },
+          { id: 'editondoubleclick', label: 'Edit on Double Click', disabled: false, defaultChecked: true, method: menuItemMethods.checkboxValueChange, },
           { id: 'grid_edit', type: 'Separator' }
         ]
       },
       {
         groupField: 'Delete Action Settings',
         items: [
-          { id: 'deleting', label: 'Allow Delete Row', defaultChecked: true },
-          { id: 'deletedialog', label: 'Show Delete Confirmation Dialog', defaultChecked: true }
+          { id: 'deleting', label: 'Allow Delete Row', disabled: false, defaultChecked: true, method: menuItemMethods.checkboxValueChange },
+          { id: 'deletedialog', label: 'Show Delete Confirmation Dialog', disabled: false, defaultChecked: true }
         ]
       }
     ],
@@ -2718,20 +2862,26 @@ export const App = () => {
       {
         groupField: 'General Settings',
         items: [
-          { id: 'selectiontype', label: 'Selection Type', type: 'dropdown', marginLeft: '43%', marginRTL: '39%', method: menuItemMethods.selectionTypeChange, dataSource: dropdownDataSource.selectiontype, placeholder: selectionType, value: selectionType },
-          { id: 'toggle', label: 'Enable Toggle Selection', defaultChecked: true },
-          { id: 'columnselection', label: 'Enable Column Selection', defaultChecked: true },
-          { id: 'simplemultirow', label: 'Enable Simple Multi Row Selection', defaultChecked: true, disabled: false },
+          {
+            id: 'selectiontype', disabled: false, method: menuItemMethods.dropdownValueChange, label: 'Selection Type', type: 'dropdown', marginLeft: '43%', marginRTL: '39%',
+            dataSource: dropdownDataSource.selectiontype, placeholder: selectionType, dataFields: { text: 'text', value: 'value', disabled: 'isDisabled' }, value: selectionType
+          },
+          { id: 'toggle', disabled: true, label: 'Enable Toggle Selection', defaultChecked: true },
+          { id: 'columnselection', disabled: false, label: 'Enable Column Selection', defaultChecked: true },
+          { id: 'simplemultirow', disabled: true, label: 'Enable Simple Multi Row Selection', defaultChecked: false },
           { id: 'grid_selection', type: 'Separator' }
         ]
       },
       {
         groupField: 'Checkbox Selection Settings',
         items: [
-          { id: 'persistselection', label: 'Persist Selection', defaultChecked: false },
-          { id: 'checkboxonly', label: 'Allow Checkbox Selection Only', defaultChecked: false },
-          { id: 'checkboxmodedefault', label: 'Checkbox Selection Mode', type: 'dropdown', marginLeft: '29%', marginRTL: '26%', method: menuItemMethods.selectionTypeChange, dataSource: dropdownDataSource.checkboxmode, placeholder: selectedCheckMode, value: selectedCheckMode },
-
+          { id: 'checkboxselection', label: 'Enable CheckBox Selection', defaultChecked: true, disabled: false, method: menuItemMethods.checkboxValueChange },
+          { id: 'persistselection', label: 'Persist Selection', defaultChecked: false, disabled: false },
+          { id: 'checkboxonly', label: 'Allow Checkbox Selection Only', defaultChecked: false, disabled: false, },
+          {
+            id: 'checkboxmodedefault', label: 'Checkbox Selection Mode', type: 'dropdown', marginLeft: '29%', marginRTL: '26%',
+            dataSource: dropdownDataSource.checkboxmode, placeholder: selectedCheckMode, value: selectedCheckMode, disabled: false,
+          }
         ]
       }
     ],
@@ -2748,30 +2898,6 @@ export const App = () => {
     ],
   };
 
-  const [checkboxValues, setCheckboxValues] = useState<Record<string, boolean>>(() => {
-    const initialState: Record<string, boolean> = {};
-
-    Object.keys(gridPropertiesConfigurations).forEach((category) => {
-      gridPropertiesConfigurations[category as keyof GridPropertiesConfigurations].forEach((item) => {
-        if ('groupField' in item) {
-          // Item is a CheckboxGroup
-          const groupItems = (item as GridPropertiesGroup).items;
-
-          // Ensure groupItems is an array before iterating
-          if (Array.isArray(groupItems)) {
-            groupItems.forEach((checkbox) => {
-              initialState[checkbox.id] = checkbox.defaultChecked ?? false;
-            });
-          }
-        } else {
-          // Item is a CheckboxConfig
-          const checkbox = item as GridPropertiesConfig;
-          initialState[checkbox.id] = checkbox.defaultChecked ?? false;
-        }
-      });
-    });
-    return initialState;
-  });
 
   const customComponentTemplates = {
 
@@ -2863,18 +2989,19 @@ export const App = () => {
                                     value={dropdownValues[item.id] || item.placeholder}
                                     enableRtl={enableRtlListView}
                                     width={166}
+                                    enabled={!item.disabled}
                                     created={(e) => {
+                                      gridPrivateMethods.changeDisableState(item.id, disableValues[item.id] || item.disabled);
                                       gridPrivateMethods.changeDropdownValue(item.id, dropdownValues[item.id] || item.placeholder);
-                                      if (!isNullOrUndefined(item.dataFields)) {
-                                        item.method(item.dataSource, dropdownRefs.current, item.id);
-                                      } else if (!isNullOrUndefined(item.method)) {
-                                        item.method(dropdownRefs.current[item.id].value, dropdownRefs.current);
+                                      if (!isNullOrUndefined(item.method)) {
+                                        item.method(selectedListItem, item, dropdownRefs.current, checkboxRefs.current);
                                       }
                                     }}
                                     change={(e) => {
+                                      gridPrivateMethods.changeDisableState(item.id, disableValues[item.id] || item.disabled);
                                       gridPrivateMethods.changeDropdownValue(item.id, e.value);
                                       if (!isNullOrUndefined(item.method)) {
-                                        item.method(e.value, dropdownRefs.current);
+                                        item.method(selectedListItem, item, dropdownRefs.current, checkboxRefs.current);
                                       }
                                     }}
                                     placeholder={item.placeholder}
@@ -2897,18 +3024,23 @@ export const App = () => {
                                       checkboxRefs.current[item.id] = instance;
                                     }
                                   }}
+                                  disabled={item.disabled}
                                   label={item.label}
                                   enableRtl={enableRtlListView}
-                                  checked={checkboxValues[item.id]}
+                                  checked={checkboxValues[item.id] || item.defaultChecked}
                                   created={(e) => {
+                                    gridPrivateMethods.changeDisableState(item.id, disableValues[item.id] || item.disabled);
+                                    gridPrivateMethods.handleCheckboxChange(item.id, checkboxValues[item.id] || item.defaultChecked);
                                     if (!isNullOrUndefined(item.method)) {
-                                      item.method(checkboxValues[item.id], item.id, checkboxRefs.current, 'Created');
+                                      item.method(selectedListItem, item, checkboxRefs.current, dropdownRefs.current);
                                     }
                                   }}
                                   change={(e) => {
+                                    gridPrivateMethods.changeDisableState(item.id, disableValues[item.id] || item.disabled);
+                                    item.defaultChecked = e.checked;
                                     gridPrivateMethods.handleCheckboxChange(item.id, e.checked);
                                     if (!isNullOrUndefined(item.method)) {
-                                      item.method(e.checked, item.id, checkboxRefs.current, 'Change');
+                                      item.method(selectedListItem, item, checkboxRefs.current, dropdownRefs.current);
                                     }
                                   }}
                                 />
@@ -3071,7 +3203,20 @@ export const App = () => {
         gridInstance?.excelExport();
       } else if (args.item.id === 'add_icon') {
         gridInstance?.addRecord();
-      } else if (args.item.id === 'export_csv') {
+      } else if (args.item.id === 'edit_icon') {
+        const selectedRowIndex = gridInstance.getSelectedRowIndexes()[0];
+        if (selectedRowIndex !== undefined) {
+          gridInstance.startEdit();
+          gridInstance.editCell(selectedRowIndex, 'CustomerName');
+        }
+      } else if (args.item.id === 'update_icon') {
+        gridInstance?.endEdit();
+      } else if (args.item.id === 'delete_icon') {
+        gridInstance?.deleteRecord();
+      } else if (args.item.id === 'cancel_icon') {
+        gridInstance?.closeEdit();
+      }
+      else if (args.item.id === 'export_csv') {
         gridInstance?.csvExport();
       } else if (args.item.id === "grid_properties") {
         customComponentTemplates.toolbarDialog("Header Settings");
@@ -3093,12 +3238,6 @@ export const App = () => {
       if ((args.column as ColumnModel).field === 'Freight') {
         let numberParser = intl.getNumberParser({ format: 'c1' });
         (args as { value: number }).value = numberParser((args as { value: number }).value);
-      }
-    },
-
-    rowSelecting: (args: RowSelectingEventArgs) => {
-      if (args.target && args.target.classList.contains('e-icons')) {
-        gridInstance.clearSelection();
       }
     },
 
@@ -3133,6 +3272,7 @@ export const App = () => {
   let isMenuDesktopOpened: boolean = false;
   let isMenuMobileOpened: boolean = false;
   let menuAppBarFields = { text: ['category', 'value'], children: ['options'] };
+
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -3241,6 +3381,7 @@ export const App = () => {
     );
   };
 
+
   /* eslint-disable react-hooks/exhaustive-deps */
   const initialGridRender: JSX.Element = useMemo(() => {
     return (
@@ -3266,7 +3407,7 @@ export const App = () => {
         enableStickyHeader={false}
         allowResizing={true}
         filterSettings={gridProperties.filterOptions}
-        toolbar={gridProperties.toolbarOptions}
+        toolbar={gridProperties.toolbarOptions.filter(item => item !== 'Edit' && item !== 'Update' && item !== 'Delete' && item !== 'Cancel')}
         pageSettings={gridProperties.pageOptions}
         editSettings={gridProperties.editOptions}
         groupSettings={gridProperties.groupOptions}
@@ -3280,7 +3421,6 @@ export const App = () => {
         queryCellInfo={handleGridEvent.queryCellInfo}
         cellSave={handleGridEvent.cellSave}
         cellSaved={handleGridEvent.cellSaved}
-        rowSelecting={handleGridEvent.rowSelecting}
         created={handleGridEvent.onGridCreated}
         dataBound={handleGridEvent.onDataBound}
         excelExportComplete={handleGridEvent.exportComplete}
@@ -3288,8 +3428,7 @@ export const App = () => {
         emptyRecordTemplate={gridCommonTemplates.emptyMessageTemplate}
       >
         <ColumnsDirective>
-          <ColumnDirective type='checkbox'
-            width={40} minWidth={35} maxWidth={80} />
+          <ColumnDirective type='checkbox' width={40} minWidth={35} maxWidth={80} />
           <ColumnDirective field="OrderID" minWidth={60} maxWidth={130}
             disableHtmlEncode={false} headerText='Order ID'
             isPrimaryKey={true} textAlign={'Right'} width={115}
@@ -3374,7 +3513,7 @@ export const App = () => {
                   template={menuTemplate}
                   cssClass="e-template-menu"
                   onOpen={() => {
-                      isMenuDesktopOpened = true;
+                    isMenuDesktopOpened = true;
                   }}
                 ></MenuComponent>
               </div>
@@ -3412,7 +3551,7 @@ export const App = () => {
 
         {/* Popup menu for mobile */}
 
-        { mobileMenuOpen && (<div className="popup-menu mobile-only">
+        {mobileMenuOpen && (<div className="popup-menu mobile-only">
 
           <div id="github" className="mobile-only" style={{ display: 'flex', alignItems: 'center' }}>
             <span className="githubdemo" style={{ display: 'flex', alignItems: 'center' }}>
@@ -3465,7 +3604,7 @@ export const App = () => {
           <div className="mobile-only">
             <a
               id="download-now-button" target="_blank"
-              href="https://www.syncfusion.com/downloads/react"
+              href="https://www.syncfusion.com/downloads/react/?tag=es-livesample-react-featurerich-datagrid"
               className="btn btn-free bold free-trial-gtag-sep15"
             >
               <span className="tryfree">TRY IT FREE</span>
