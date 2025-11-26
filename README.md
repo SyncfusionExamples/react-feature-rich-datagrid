@@ -1,4 +1,4 @@
-# React-Feature-Rich-Grid
+# React Feature Rich DataGrid
 
 This sample demonstrates the full capabilities of the Syncfusion [React Data Grid](https://www.syncfusion.com/react-components/react-data-grid) by integrating all available APIs into a single, interactive experience. Users can dynamically enable or disable features such as CRUD operations, editing, and exporting—directly through the UI—without writing a single line of code. This makes it an ideal tool for presales evaluations, customer demos, and internal testing, allowing users to explore and understand the grid's flexibility and power in real time.
 
