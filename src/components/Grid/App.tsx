@@ -3501,7 +3501,7 @@ export const App = () => {
             <>
               <div id="github" className="desktop-only">
                 <span className="githubdemo"> <span> <i className="fab fa-github"></i> </span>
-                  <a href="https://github.com/SyncfusionExamples/React-Feature-Rich-Grid" target="_blank" rel="noopener noreferrer"
+                  <a href="https://github.com/SyncfusionExamples/react-feature-rich-datagrid" target="_blank" rel="noopener noreferrer"
                     style={{ textDecoration: 'none', color: 'white', fontSize: '15px' }}>GitHub</a></span>
               </div>
 
@@ -3559,7 +3559,7 @@ export const App = () => {
                 <i className="fab fa-github"></i>
               </span>
               <a
-                href="https://github.com/SyncfusionExamples/React-Feature-Rich-Grid"
+                href="https://github.com/SyncfusionExamples/react-feature-rich-datagrid"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ textDecoration: 'none', color: 'white', fontSize: '15px', marginLeft: '5px' }}>GitHub</a></span>
