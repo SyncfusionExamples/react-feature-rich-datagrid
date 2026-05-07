@@ -1,4 +1,3 @@
-var glob = require("glob");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
@@ -6,7 +5,7 @@ const path = require("path");
 
 module.exports = {
   entry: {
-    index: glob.sync("./src/**/**/*.tsx")
+    index: "./src/common/index.tsx"
   },
   target: "web",
   module: {
